@@ -148,12 +148,17 @@ bool seek_to_record(uint16_t record_num) {
     uint16_t dos_record = record_num + 1;
 
     /* Send POSITION command: P{channel},{record_low},{record_high},{position} */
-    /* Channel number is 96 + secondary address for REL files */
+    /* Channel number is the LFN (logical file number) */
     cmd_len = sprintf(cmd, "P%c%c%c%c",
-                      (char)(96 + bloom_secondary),
+                      (char)bloom_lfn,
                       (char)(dos_record & 0xFF),
                       (char)((dos_record >> 8) & 0xFF),
                       (char)1);  /* Position to byte 1 (first data byte) */
+
+    printf("seek rec %u: P/%u/%u/%u/1\n", record_num,
+           (unsigned)bloom_lfn,
+           (unsigned)(dos_record & 0xFF),
+           (unsigned)((dos_record >> 8) & 0xFF));
 
     /* Set output to command channel */
     if (cbm_k_chkout(15)) {
@@ -181,13 +186,19 @@ bool read_current_record(void) {
         return false;
     }
 
+    printf("reading rec %d... ", current_record);
+
     for (i = 0; i < RECORD_SIZE; i++) {
         record_buffer[i] = cbm_k_basin();
         if (cbm_k_readst()) {
-            printf("read error\n");
+            printf("read error at byte %u\n", i);
             return false;
         }
     }
+
+    printf("ok [%02x %02x %02x %02x]\n",
+           record_buffer[0], record_buffer[1],
+           record_buffer[2], record_buffer[3]);
 
     return true;
 }
@@ -197,20 +208,35 @@ bool check_bit(uint32_t bit_position) {
     uint8_t bit_offset = bit_position % 8;
     uint16_t record_num = byte_offset / RECORD_SIZE;
     uint16_t byte_in_record = byte_offset % RECORD_SIZE;
-    
+    bool bit_set;
+
+    printf("  bit %lu: byte %lu = rec %u + %u, bit %u\n",
+           (unsigned long)bit_position,
+           (unsigned long)byte_offset,
+           (unsigned)record_num,
+           (unsigned)byte_in_record,
+           (unsigned)bit_offset);
+
     /* Seek to the correct record if needed */
     if (record_num != current_record) {
         if (!seek_to_record(record_num)) {
             return false;
         }
-        
+
         if (!read_current_record()) {
             return false;
         }
     }
-    
+
     /* Check the bit */
-    return (record_buffer[byte_in_record] & (1 << bit_offset)) != 0;
+    bit_set = (record_buffer[byte_in_record] & (1 << bit_offset)) != 0;
+    printf("  -> byte[%u]=0x%02x, bit %u = %d\n",
+           (unsigned)byte_in_record,
+           record_buffer[byte_in_record],
+           (unsigned)bit_offset,
+           bit_set ? 1 : 0);
+
+    return bit_set;
 }
 
 
