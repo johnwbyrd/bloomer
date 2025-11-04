@@ -97,68 +97,105 @@ const hash_func_t hash_functions[NUM_HASH_FUNCTIONS] = {
 
 
 /*
- * Disk I/O functions
+ * Disk I/O Error Checking - called after EVERY disk operation
  */
 
-/* Read and check DOS error from command channel 15 */
-uint8_t check_dos_error(char *err_msg, uint8_t err_msg_size) {
-    uint8_t err_num = 0;
-    uint8_t err_idx = 0;
-    uint8_t c;
+/* Read DOS error status from command channel 15
+ * Returns: error code (0 = OK)
+ */
+static uint8_t read_dos_status(uint8_t device, char *msg_buf, uint8_t msg_bufsize) {
+    uint8_t err_code = 0;
+    uint8_t idx = 0;
+    uint8_t c, status;
 
+    /* Set input to command channel */
     if (cbm_k_chkin(15)) {
-        if (err_msg) strcpy(err_msg, "can't read cmd channel");
+        cbm_k_clrch();
+        if (msg_buf && msg_bufsize) {
+            strncpy(msg_buf, "CHKIN 15 FAIL", msg_bufsize - 1);
+            msg_buf[msg_bufsize - 1] = '\0';
+        }
         return 255;
     }
 
-    /* Read error number (2 digits) */
+    /* Read 2-digit error code */
     c = cbm_k_basin();
-    if (c >= '0' && c <= '9') err_num = (c - '0') * 10;
+    if (c >= '0' && c <= '9') err_code = (c - '0') * 10;
     c = cbm_k_basin();
-    if (c >= '0' && c <= '9') err_num += (c - '0');
+    if (c >= '0' && c <= '9') err_code += (c - '0');
 
-    /* Read rest of message until CR if buffer provided */
-    if (err_msg && err_msg_size > 0) {
+    /* Read error message text if buffer provided */
+    if (msg_buf && msg_bufsize > 0) {
         cbm_k_basin();  /* skip comma */
-        while (err_idx < err_msg_size - 1) {
+        while (idx < msg_bufsize - 1) {
             c = cbm_k_basin();
-            if (c == '\r' || cbm_k_readst()) break;
-            err_msg[err_idx++] = c;
+            status = cbm_k_readst();
+            if (c == '\r' || (status & 0x40)) break;  /* CR or EOF */
+            msg_buf[idx++] = c;
         }
-        err_msg[err_idx] = '\0';
-    } else {
-        /* Skip rest of message */
-        while (!cbm_k_readst()) {
-            c = cbm_k_basin();
-            if (c == '\r') break;
-        }
+        msg_buf[idx] = '\0';
     }
 
     cbm_k_clrch();
-    return err_num;
+    return err_code;
 }
 
-bool open_bloom_file(void) {
-    cbm_k_close(bloom_lfn);
+/* Print and check DOS status after an operation
+ * Returns: true if OK (err_code 0 or in ok_codes list), false otherwise
+ */
+static bool check_dos_status(uint8_t device, const char *operation, const uint8_t *ok_codes, uint8_t num_ok_codes) {
+    char msg[64];
+    uint8_t err;
+    uint8_t i;
+    bool is_ok;
 
-    /* Set up file parameters for REL file with 254-byte records */
-    /* For REL files: third param is secondary address (2-14), record length goes in filename */
-    cbm_k_setlfs(bloom_lfn, bloom_device, bloom_secondary);
-    cbm_k_setnam("bloom.dat,l,\xFE");  /* \xFE = 254 = record length */
+    err = read_dos_status(device, msg, sizeof(msg));
 
-    /* Open the file */
-    if (cbm_k_open()) {
-        printf("error opening bloom.dat\n");
-        return false;
+    printf("%s: DOS %02u,%s\n", operation, err, msg);
+
+    /* Check if error code is 0 or in the OK list */
+    is_ok = (err == 0);
+    for (i = 0; i < num_ok_codes && !is_ok; i++) {
+        if (err == ok_codes[i]) is_ok = true;
     }
 
-    /* Open command channel (leave it open for POSITION commands) */
-    cbm_k_close(15);
+    if (!is_ok) {
+        printf("ERR: %s failed\n", operation);
+    }
+
+    return is_ok;
+}
+
+
+/*
+ * Disk I/O functions
+ */
+
+/* Open bloom filter for reading
+ * Returns: true on success, false on error
+ */
+static bool bloom_open(void) {
+    uint8_t status;
+
+    /* Open command channel */
     cbm_k_setlfs(15, bloom_device, 15);
     cbm_k_setnam("");
-    if (cbm_k_open()) {
-        printf("error opening command channel\n");
-        cbm_k_close(bloom_lfn);
+    status = cbm_k_open();
+    if (status) {
+        printf("ERR: open cmd ch, status=%u\n", status);
+        return false;
+    }
+    check_dos_status(bloom_device, "open cmd", NULL, 0);
+
+    /* Open bloom data file as REL with 254-byte records */
+    cbm_k_setlfs(bloom_lfn, bloom_device, bloom_secondary);
+    cbm_k_setnam("bloom.dat,l,\xFE");
+    status = cbm_k_open();
+    if (status) {
+        printf("ERR: open bloom, status=%u\n", status);
+        return false;
+    }
+    if (!check_dos_status(bloom_device, "open bloom", NULL, 0)) {
         return false;
     }
 
@@ -166,129 +203,63 @@ bool open_bloom_file(void) {
     return true;
 }
 
-void close_bloom_file(void) {
+/* Close bloom filter */
+static void bloom_close(void) {
     cbm_k_clrch();
-    cbm_k_close(15);  /* Close command channel */
     cbm_k_close(bloom_lfn);
-    current_record = -1;
+    cbm_k_close(15);
 }
 
-bool seek_to_record(uint16_t record_num) {
-    char cmd[32];
-    uint8_t cmd_len;
-
-    if (record_num == current_record) {
-        return true;  /* Already positioned */
-    }
-
-    /* Use POSITION command for REL file random access */
-    /* Format: "P" + channel + record_low + record_high + byte_in_record */
-    /* Record numbers are 1-based in CBM DOS, so add 1 */
-    uint16_t dos_record = record_num + 1;
-
-    /* Send POSITION command: P{channel},{record_low},{record_high},{position} */
-    /* Channel number is the secondary address directly (not 96+secondary in machine code) */
-    cmd_len = sprintf(cmd, "P%c%c%c%c",
-                      (char)bloom_secondary,
-                      (char)(dos_record & 0xFF),
-                      (char)((dos_record >> 8) & 0xFF),
-                      (char)1);  /* Position to byte 1 (first data byte) */
-
-    printf("seek rec %u: P/%u/%u/%u/1\n", record_num,
-           (unsigned)bloom_secondary,
-           (unsigned)(dos_record & 0xFF),
-           (unsigned)((dos_record >> 8) & 0xFF));
-
-    /* Set output to command channel */
-    if (cbm_k_chkout(15)) {
-        return false;
-    }
-
-    /* Send command */
-    for (uint8_t i = 0; i < cmd_len; i++) {
-        cbm_k_bsout(cmd[i]);
-    }
-
-    /* Clear channel after sending command */
-    cbm_k_clrch();
-
-    /* Check for DOS errors */
-    char err_msg[40];
-    uint8_t err_num = check_dos_error(err_msg, sizeof(err_msg));
-
-    if (err_num != 0 && err_num != 50) {
-        printf("dos error %u: %s\n", err_num, err_msg);
-        return false;
-    }
-
-    if (err_num == 50) {
-        printf("(new record) ");
-    }
-
-    current_record = record_num;
-    return true;
-}
-
-bool read_current_record(void) {
+/* Read one bit from bloom filter
+ * Returns: true if bit set, false if bit clear
+ */
+static bool bloom_read_bit(uint32_t bit_pos) {
+    uint32_t byte_off = bit_pos / 8;
+    uint8_t bit_off = bit_pos % 8;
+    uint16_t rec = byte_off / RECORD_SIZE;
+    uint16_t byte_in_rec = byte_off % RECORD_SIZE;
+    uint16_t dos_rec;
     uint16_t i;
+    uint8_t st;
 
-    /* Ensure input channel is set to bloom file */
-    if (cbm_k_chkin(bloom_lfn)) {
-        printf("error setting input channel\n");
-        return false;
-    }
+    /* Seek to record if needed */
+    if (rec != current_record) {
+        dos_rec = rec + 1;  /* 1-based */
 
-    printf("reading rec %d... ", current_record);
-
-    for (i = 0; i < RECORD_SIZE; i++) {
-        record_buffer[i] = cbm_k_basin();
-        if (cbm_k_readst()) {
-            printf("read error at byte %u\n", i);
-            return false;
-        }
-    }
-
-    printf("ok [%02x %02x %02x %02x]\n",
-           record_buffer[0], record_buffer[1],
-           record_buffer[2], record_buffer[3]);
-
-    return true;
-}
-
-bool check_bit(uint32_t bit_position) {
-    uint32_t byte_offset = bit_position / 8;
-    uint8_t bit_offset = bit_position % 8;
-    uint16_t record_num = byte_offset / RECORD_SIZE;
-    uint16_t byte_in_record = byte_offset % RECORD_SIZE;
-    bool bit_set;
-
-    printf("  bit %lu: byte %lu = rec %u + %u, bit %u\n",
-           (unsigned long)bit_position,
-           (unsigned long)byte_offset,
-           (unsigned)record_num,
-           (unsigned)byte_in_record,
-           (unsigned)bit_offset);
-
-    /* Seek to the correct record if needed */
-    if (record_num != current_record) {
-        if (!seek_to_record(record_num)) {
+        /* Send POSITION command */
+        st = cbm_k_chkout(15);
+        if (st) {
+            cbm_k_clrch();
+            printf("ERR: chkout 15=%u\n", st);
             return false;
         }
 
-        if (!read_current_record()) {
+        cbm_k_bsout('P');
+        cbm_k_bsout(bloom_secondary);
+        cbm_k_bsout(dos_rec & 0xFF);
+        cbm_k_bsout((dos_rec >> 8) & 0xFF);
+        cbm_k_bsout(1);
+
+        cbm_k_clrch();
+        check_dos_status(bloom_device, "position", NULL, 0);
+
+        /* Read record */
+        st = cbm_k_chkin(bloom_lfn);
+        if (st) {
+            cbm_k_clrch();
+            printf("ERR: chkin %u=%u\n", bloom_lfn, st);
             return false;
         }
+
+        for (i = 0; i < RECORD_SIZE; i++) {
+            record_buffer[i] = cbm_k_basin();
+        }
+
+        cbm_k_clrch();
+        current_record = rec;
     }
 
-    /* Check the bit */
-    bit_set = (record_buffer[byte_in_record] & (1 << bit_offset)) != 0;
-    printf("  -> byte[%u]=0x%02x, bit %u = %d\n",
-           (unsigned)byte_in_record,
-           record_buffer[byte_in_record],
-           (unsigned)bit_offset,
-           bit_set ? 1 : 0);
-
-    return bit_set;
+    return (record_buffer[byte_in_rec] & (1 << bit_off)) != 0;
 }
 
 
@@ -296,22 +267,21 @@ bool check_bit(uint32_t bit_position) {
  * Bloom filter check
  */
 
-bool check_word(const char *word) {
+static bool check_word(const char *word) {
     uint8_t i;
-    uint32_t hash_val;
+    uint32_t hash;
     uint32_t bit_pos;
-    
-    /* Check all hash functions */
+
     for (i = 0; i < NUM_HASH_FUNCTIONS; i++) {
-        hash_val = hash_functions[i](word, i);
-        bit_pos = hash_val % BLOOM_SIZE_BITS;
-        
-        if (!check_bit(bit_pos)) {
-            return false;  /* Definitely not in set */
+        hash = hash_functions[i](word, i);
+        bit_pos = hash % BLOOM_SIZE_BITS;
+
+        if (!bloom_read_bit(bit_pos)) {
+            return false;  /* Definitely not in dictionary */
         }
     }
-    
-    return true;  /* Probably in set */
+
+    return true;  /* Probably in dictionary */
 }
 
 
@@ -366,60 +336,47 @@ void trim(char *str) {
 
 int main(void) {
     char word[MAX_WORD_LEN];
-    bool result;
 
     printf("c64 bloom filter spell checker\n");
     printf("================================\n\n");
-    printf("loading bloom filter...\n");
-    
-    /* Open Bloom filter file */
-    if (!open_bloom_file()) {
-        printf("\nfailed to open bloom.dat\n");
+
+    /* Open bloom filter */
+    if (!bloom_open()) {
+        printf("failed to open bloom.dat\n");
         return 1;
     }
-    
+
     printf("ready!\n\n");
-    
+
     /* Main loop */
     while (1) {
-        cbm_k_clrch();  /* Clear channel to restore keyboard input */
-        printf("enter word (or 'quit'): ");
-        
-        /* Read line */
+        cbm_k_clrch();
+        printf("word (or 'quit'): ");
+
         if (fgets(word, sizeof(word), stdin) == NULL) {
             break;
         }
-        
-        /* Remove newline and trim */
-        trim(word);
 
+        trim(word);
         if (strlen(word) == 0) {
             continue;
         }
 
-        /* Convert PETSCII to uppercase ASCII */
         petscii_to_ascii_upper(word);
 
-        /* Check for quit */
         if (strcmp(word, "QUIT") == 0) {
             break;
         }
-        
-        /* Check spelling */
-        printf("checking '%s'...\n", word);
-        result = check_word(word);
-        
-        if (result) {
-            printf("  -> probably correct\n\n");
+
+        if (check_word(word)) {
+            printf("  OK\n");
         } else {
-            printf("  -> not found\n\n");
+            printf("  NOT FOUND\n");
         }
     }
-    
-    /* Cleanup */
-    close_bloom_file();
-    
+
+    bloom_close();
     printf("\ngoodbye!\n");
-    
+
     return 0;
 }
