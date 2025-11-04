@@ -1,0 +1,13 @@
+[project]
+name = "bloomer"
+version = "0.1.0"
+description = "C64 Bloom Filter Spell Checker"
+requires-python = ">=3.8"
+dependencies = [
+    "requests>=2.31.0",
+    "d64>=1.10",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"

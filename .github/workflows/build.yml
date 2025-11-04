@@ -23,7 +23,7 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install requests
+        pip install -e .
     
     - name: Download and install LLVM-MOS SDK
       run: |
@@ -37,33 +37,32 @@ jobs:
       run: |
         mos-c64-clang --version
     
-    - name: Build Bloom filter
+    - name: Build Bloom filter and generate config
       run: |
-        mkdir -p build
         python3 build_bloom.py
-    
+
     - name: Compile C64 program
       run: |
-        mos-c64-clang -Os -o build/spellcheck.prg spellcheck.c
-        ls -lh build/spellcheck.prg
-    
+        mos-c64-clang -Os -Ibuild/generated -o build/artifacts/spellcheck.prg src/spellcheck.c
+        ls -lh build/artifacts/spellcheck.prg
+
     - name: Create final disk image
       run: |
         python3 build_bloom.py
-    
+
     - name: Verify disk image
       run: |
-        ls -lh build/spellcheck.d64
-        echo "Disk image size: $(stat -c%s build/spellcheck.d64) bytes"
+        ls -lh build/artifacts/spellcheck.d64
+        echo "Disk image size: $(stat -c%s build/artifacts/spellcheck.d64) bytes"
     
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: c64-spellcheck
         path: |
-          build/spellcheck.prg
-          build/spellcheck.d64
-          build/bloom.dat
+          build/artifacts/spellcheck.prg
+          build/artifacts/spellcheck.d64
+          build/generated/bloom.dat
         retention-days: 90
     
     - name: Create release on tag
@@ -71,7 +70,7 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          build/spellcheck.d64
-          build/spellcheck.prg
+          build/artifacts/spellcheck.d64
+          build/artifacts/spellcheck.prg
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

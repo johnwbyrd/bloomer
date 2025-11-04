@@ -14,7 +14,7 @@
 #include "bloom_config.h"
 
 #define MAX_WORD_LEN 64
-#define RECORD_SIZE 256
+#define RECORD_SIZE 254  /* CBM DOS REL files support 1-254 byte records */
 
 /* File handle for Bloom filter */
 static uint8_t bloom_lfn = 2;
@@ -103,9 +103,9 @@ const hash_func_t hash_functions[NUM_HASH_FUNCTIONS] = {
 bool open_bloom_file(void) {
     cbm_k_close(bloom_lfn);
 
-    /* Set up file parameters */
-    cbm_k_setlfs(bloom_lfn, bloom_device, bloom_secondary);
-    cbm_k_setnam("bloom.dat,s,r");
+    /* Set up file parameters for REL file with 256-byte records */
+    cbm_k_setlfs(bloom_lfn, bloom_device, RECORD_SIZE);
+    cbm_k_setnam("bloom.dat,l,");
 
     /* Open the file */
     if (cbm_k_open()) {
@@ -131,28 +131,52 @@ void close_bloom_file(void) {
 }
 
 bool seek_to_record(uint16_t record_num) {
-    uint32_t byte_offset;
-    uint32_t i;
+    char cmd[32];
+    uint8_t cmd_len;
 
     if (record_num == current_record) {
         return true;  /* Already positioned */
     }
 
-    /* Close and reopen to reset position */
-    close_bloom_file();
-    if (!open_bloom_file()) {
+    /* Use POSITION command for REL file random access */
+    /* Format: "P" + channel + record_low + record_high + byte_in_record */
+    /* Record numbers are 1-based in CBM DOS, so add 1 */
+    uint16_t dos_record = record_num + 1;
+
+    /* Clear channel before sending command */
+    cbm_k_clrch();
+
+    /* Open command channel (15) if needed */
+    cbm_k_setlfs(15, bloom_device, 15);
+    cbm_k_setnam("");
+    if (cbm_k_open()) {
         return false;
     }
 
-    /* Seek by reading bytes (no POSITION command available for SEQ) */
-    byte_offset = (uint32_t)record_num * RECORD_SIZE;
+    /* Send POSITION command: P{channel},{record_low},{record_high},{position} */
+    cmd_len = sprintf(cmd, "P%c%c%c%c",
+                      (char)bloom_secondary,
+                      (char)(dos_record & 0xFF),
+                      (char)((dos_record >> 8) & 0xFF),
+                      (char)1);  /* Position to byte 1 (first data byte) */
 
-    for (i = 0; i < byte_offset; i++) {
-        cbm_k_basin();
-        if (cbm_k_readst()) {
-            printf("seek error\n");
-            return false;
-        }
+    /* Set output to command channel */
+    if (cbm_k_chkout(15)) {
+        cbm_k_close(15);
+        return false;
+    }
+
+    /* Send command */
+    for (uint8_t i = 0; i < cmd_len; i++) {
+        cbm_k_bsout(cmd[i]);
+    }
+
+    cbm_k_clrch();
+    cbm_k_close(15);
+
+    /* Restore input channel */
+    if (cbm_k_chkin(bloom_lfn)) {
+        return false;
     }
 
     current_record = record_num;
@@ -222,9 +246,27 @@ bool check_word(const char *word) {
  * String utilities
  */
 
-void to_upper(char *str) {
+void petscii_to_ascii_upper(char *str) {
+    /* Convert PETSCII input to uppercase ASCII for consistent hashing
+     * PETSCII lowercase (0xC1-0xDA) -> ASCII uppercase (0x41-0x5A)
+     * PETSCII uppercase (0x41-0x5A) -> ASCII uppercase (0x41-0x5A)
+     */
     while (*str) {
-        *str = toupper((unsigned char)*str);
+        unsigned char c = (unsigned char)*str;
+
+        /* PETSCII lowercase letters (a-z: 0xC1-0xDA) */
+        if (c >= 0xC1 && c <= 0xDA) {
+            *str = c - 0x80;  /* Convert to ASCII uppercase A-Z */
+        }
+        /* PETSCII uppercase letters (A-Z: 0x41-0x5A) - already ASCII */
+        else if (c >= 0x41 && c <= 0x5A) {
+            *str = c;  /* Already uppercase ASCII */
+        }
+        /* PETSCII shifted lowercase (A-Z: 0x61-0x7A) */
+        else if (c >= 0x61 && c <= 0x7A) {
+            *str = c - 0x20;  /* Convert to uppercase */
+        }
+
         str++;
     }
 }
@@ -276,14 +318,14 @@ int main(void) {
         
         /* Remove newline and trim */
         trim(word);
-        
+
         if (strlen(word) == 0) {
             continue;
         }
-        
-        /* Convert to uppercase */
-        to_upper(word);
-        
+
+        /* Convert PETSCII to uppercase ASCII */
+        petscii_to_ascii_upper(word);
+
         /* Check for quit */
         if (strcmp(word, "QUIT") == 0) {
             break;
