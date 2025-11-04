@@ -103,7 +103,7 @@ const hash_func_t hash_functions[NUM_HASH_FUNCTIONS] = {
 bool open_bloom_file(void) {
     cbm_k_close(bloom_lfn);
 
-    /* Set up file parameters for REL file with 256-byte records */
+    /* Set up file parameters for REL file with 254-byte records */
     cbm_k_setlfs(bloom_lfn, bloom_device, RECORD_SIZE);
     cbm_k_setnam("bloom.dat,l,");
 
@@ -113,9 +113,12 @@ bool open_bloom_file(void) {
         return false;
     }
 
-    /* Set input channel */
-    if (cbm_k_chkin(bloom_lfn)) {
-        printf("error setting input channel\n");
+    /* Open command channel (leave it open for POSITION commands) */
+    cbm_k_close(15);
+    cbm_k_setlfs(15, bloom_device, 15);
+    cbm_k_setnam("");
+    if (cbm_k_open()) {
+        printf("error opening command channel\n");
         cbm_k_close(bloom_lfn);
         return false;
     }
@@ -126,6 +129,7 @@ bool open_bloom_file(void) {
 
 void close_bloom_file(void) {
     cbm_k_clrch();
+    cbm_k_close(15);  /* Close command channel */
     cbm_k_close(bloom_lfn);
     current_record = -1;
 }
@@ -143,26 +147,16 @@ bool seek_to_record(uint16_t record_num) {
     /* Record numbers are 1-based in CBM DOS, so add 1 */
     uint16_t dos_record = record_num + 1;
 
-    /* Clear channel before sending command */
-    cbm_k_clrch();
-
-    /* Open command channel (15) if needed */
-    cbm_k_setlfs(15, bloom_device, 15);
-    cbm_k_setnam("");
-    if (cbm_k_open()) {
-        return false;
-    }
-
     /* Send POSITION command: P{channel},{record_low},{record_high},{position} */
+    /* Channel number is 96 + secondary address for REL files */
     cmd_len = sprintf(cmd, "P%c%c%c%c",
-                      (char)bloom_secondary,
+                      (char)(96 + bloom_secondary),
                       (char)(dos_record & 0xFF),
                       (char)((dos_record >> 8) & 0xFF),
                       (char)1);  /* Position to byte 1 (first data byte) */
 
     /* Set output to command channel */
     if (cbm_k_chkout(15)) {
-        cbm_k_close(15);
         return false;
     }
 
@@ -171,13 +165,8 @@ bool seek_to_record(uint16_t record_num) {
         cbm_k_bsout(cmd[i]);
     }
 
+    /* Clear channel after sending command */
     cbm_k_clrch();
-    cbm_k_close(15);
-
-    /* Restore input channel */
-    if (cbm_k_chkin(bloom_lfn)) {
-        return false;
-    }
 
     current_record = record_num;
     return true;
@@ -185,6 +174,12 @@ bool seek_to_record(uint16_t record_num) {
 
 bool read_current_record(void) {
     uint16_t i;
+
+    /* Ensure input channel is set to bloom file */
+    if (cbm_k_chkin(bloom_lfn)) {
+        printf("error setting input channel\n");
+        return false;
+    }
 
     for (i = 0; i < RECORD_SIZE; i++) {
         record_buffer[i] = cbm_k_basin();
@@ -309,6 +304,7 @@ int main(void) {
     
     /* Main loop */
     while (1) {
+        cbm_k_clrch();  /* Clear channel to restore keyboard input */
         printf("enter word (or 'quit'): ");
         
         /* Read line */
