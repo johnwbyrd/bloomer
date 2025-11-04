@@ -189,7 +189,7 @@ static bool bloom_open(void) {
 
     /* Open bloom data file as REL with 254-byte records */
     cbm_k_setlfs(bloom_lfn, bloom_device, bloom_secondary);
-    cbm_k_setnam("bloom.dat,l,\xFE");
+    cbm_k_setnam("BLOOM.DAT,L,\xFE");
     status = cbm_k_open();
     if (status) {
         printf("ERR: open bloom, status=%u\n", status);
