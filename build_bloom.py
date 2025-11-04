@@ -411,7 +411,7 @@ def main():
     write_bloom_file(bloom, bloom_path)
     
     # Generate C header with configuration
-    header_path = Path('src') / 'bloom_config.h'
+    header_path = Path('bloom_config.h')
     with open(header_path, 'w') as f:
         f.write(f"""/* Auto-generated Bloom filter configuration */
 #ifndef BLOOM_CONFIG_H
