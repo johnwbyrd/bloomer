@@ -389,9 +389,9 @@ def write_directory(disk, dir_track, dir_sector, dir_entries):
 
 
 def main():
-    # Change to tools directory for relative paths
+    # Change to project directory for relative paths
     script_dir = Path(__file__).parent
-    project_dir = script_dir.parent
+    project_dir = script_dir if script_dir.name != 'tools' else script_dir.parent
     os.chdir(project_dir)
     
     # Download word list if needed
