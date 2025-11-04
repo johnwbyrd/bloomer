@@ -40,16 +40,16 @@ jobs:
     - name: Build Bloom filter
       run: |
         mkdir -p build
-        python3 tools/build_bloom.py
+        python3 build_bloom.py
     
     - name: Compile C64 program
       run: |
-        mos-c64-clang -Os -o build/spellcheck.prg src/spellcheck.c
+        mos-c64-clang -Os -o build/spellcheck.prg spellcheck.c
         ls -lh build/spellcheck.prg
     
     - name: Create final disk image
       run: |
-        python3 tools/build_bloom.py
+        python3 build_bloom.py
     
     - name: Verify disk image
       run: |
