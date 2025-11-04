@@ -104,8 +104,9 @@ bool open_bloom_file(void) {
     cbm_k_close(bloom_lfn);
 
     /* Set up file parameters for REL file with 254-byte records */
-    cbm_k_setlfs(bloom_lfn, bloom_device, RECORD_SIZE);
-    cbm_k_setnam("bloom.dat,l,");
+    /* For REL files: third param is secondary address (2-14), record length goes in filename */
+    cbm_k_setlfs(bloom_lfn, bloom_device, bloom_secondary);
+    cbm_k_setnam("bloom.dat,l,\xFE");  /* \xFE = 254 = record length */
 
     /* Open the file */
     if (cbm_k_open()) {
@@ -148,15 +149,15 @@ bool seek_to_record(uint16_t record_num) {
     uint16_t dos_record = record_num + 1;
 
     /* Send POSITION command: P{channel},{record_low},{record_high},{position} */
-    /* Channel number is the LFN (logical file number) */
+    /* Channel number is 96 + secondary address (e.g., 96+2=98 for channel 2) */
     cmd_len = sprintf(cmd, "P%c%c%c%c",
-                      (char)bloom_lfn,
+                      (char)(96 + bloom_secondary),
                       (char)(dos_record & 0xFF),
                       (char)((dos_record >> 8) & 0xFF),
                       (char)1);  /* Position to byte 1 (first data byte) */
 
     printf("seek rec %u: P/%u/%u/%u/1\n", record_num,
-           (unsigned)bloom_lfn,
+           (unsigned)(96 + bloom_secondary),
            (unsigned)(dos_record & 0xFF),
            (unsigned)((dos_record >> 8) & 0xFF));
 
