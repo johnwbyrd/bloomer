@@ -101,66 +101,75 @@ const hash_func_t hash_functions[NUM_HASH_FUNCTIONS] = {
  */
 
 bool open_bloom_file(void) {
-    uint8_t status;
-    
-    cbm_close(bloom_lfn);
-    
-    /* Open as SEQ file for reading */
-    status = cbm_open(bloom_lfn, bloom_device, bloom_secondary, "bloom.dat,s,r");
-    
-    if (status != 0) {
+    cbm_k_close(bloom_lfn);
+
+    /* Set up file parameters */
+    cbm_k_setlfs(bloom_lfn, bloom_device, bloom_secondary);
+    cbm_k_setnam("bloom.dat,s,r");
+
+    /* Open the file */
+    if (cbm_k_open()) {
         printf("error opening bloom.dat\n");
         return false;
     }
-    
+
+    /* Set input channel */
+    if (cbm_k_chkin(bloom_lfn)) {
+        printf("error setting input channel\n");
+        cbm_k_close(bloom_lfn);
+        return false;
+    }
+
     current_record = -1;
     return true;
 }
 
 void close_bloom_file(void) {
-    cbm_close(bloom_lfn);
+    cbm_k_clrch();
+    cbm_k_close(bloom_lfn);
     current_record = -1;
 }
 
 bool seek_to_record(uint16_t record_num) {
     uint32_t byte_offset;
     uint32_t i;
-    uint8_t dummy;
-    
+
     if (record_num == current_record) {
         return true;  /* Already positioned */
     }
-    
+
     /* Close and reopen to reset position */
     close_bloom_file();
     if (!open_bloom_file()) {
         return false;
     }
-    
+
     /* Seek by reading bytes (no POSITION command available for SEQ) */
     byte_offset = (uint32_t)record_num * RECORD_SIZE;
-    
+
     for (i = 0; i < byte_offset; i++) {
-        if (cbm_read(bloom_lfn, &dummy, 1) != 1) {
+        cbm_k_basin();
+        if (cbm_k_readst()) {
             printf("seek error\n");
             return false;
         }
     }
-    
+
     current_record = record_num;
     return true;
 }
 
 bool read_current_record(void) {
     uint16_t i;
-    
+
     for (i = 0; i < RECORD_SIZE; i++) {
-        if (cbm_read(bloom_lfn, &record_buffer[i], 1) != 1) {
+        record_buffer[i] = cbm_k_basin();
+        if (cbm_k_readst()) {
             printf("read error\n");
             return false;
         }
     }
-    
+
     return true;
 }
 
@@ -243,10 +252,7 @@ void trim(char *str) {
 int main(void) {
     char word[MAX_WORD_LEN];
     bool result;
-    
-    /* Clear screen */
-    clrscr();
-    
+
     printf("c64 bloom filter spell checker\n");
     printf("================================\n\n");
     printf("loading bloom filter...\n");
@@ -254,8 +260,6 @@ int main(void) {
     /* Open Bloom filter file */
     if (!open_bloom_file()) {
         printf("\nfailed to open bloom.dat\n");
-        printf("press any key to exit\n");
-        cgetc();
         return 1;
     }
     
