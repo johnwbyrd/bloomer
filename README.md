@@ -99,9 +99,12 @@ c64-spellcheck/
 ├── README.md               # This file
 ├── src/
 │   ├── spellcheck.c        # Main C64 program
-│   └── bloom_config.h      # Auto-generated configuration
-├── tools/
-│   └── build_bloom.py      # Bloom filter builder
+│   ├── python/             # Python build tools
+│   │   ├── build_bloom.py  # Bloom filter builder
+│   │   └── inject_autoload.py # Web emulator auto-load injector
+│   └── emulator/           # Viciious emulator build config
+│       └── webpack.config.js
+├── bloom_config.h          # Auto-generated configuration
 └── build/
     ├── spellcheck.prg      # Compiled program
     ├── bloom.dat           # Bloom filter data

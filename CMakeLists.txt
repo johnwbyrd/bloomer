@@ -19,7 +19,7 @@ add_custom_command(
     OUTPUT ${CMAKE_SOURCE_DIR}/build/generated/bloom_config.h
            ${CMAKE_SOURCE_DIR}/build/generated/bloom.dat
     COMMAND ${CMAKE_COMMAND} -E echo "Generating Bloom filter..."
-    COMMAND python3 ${CMAKE_SOURCE_DIR}/build_bloom.py
+    COMMAND python3 ${CMAKE_SOURCE_DIR}/src/python/build_bloom.py
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     COMMENT "Building Bloom filter data"
 )
@@ -50,7 +50,7 @@ set_target_properties(spellcheck PROPERTIES
 # Custom target to create disk image after build
 add_custom_command(TARGET spellcheck POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E echo "Creating disk image..."
-    COMMAND python3 ${CMAKE_SOURCE_DIR}/build_bloom.py
+    COMMAND python3 ${CMAKE_SOURCE_DIR}/src/python/build_bloom.py
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     COMMENT "Creating C64 disk image"
 )

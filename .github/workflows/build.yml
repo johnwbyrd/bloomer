@@ -39,7 +39,7 @@ jobs:
     
     - name: Build Bloom filter and generate config
       run: |
-        python3 build_bloom.py
+        python3 src/python/build_bloom.py
 
     - name: Compile C64 program
       run: |
@@ -48,13 +48,38 @@ jobs:
 
     - name: Create final disk image
       run: |
-        python3 build_bloom.py
+        python3 src/python/build_bloom.py
 
     - name: Verify disk image
       run: |
         ls -lh build/artifacts/spellcheck.d64
         echo "Disk image size: $(stat -c%s build/artifacts/spellcheck.d64) bytes"
-    
+
+    - name: Set up Node.js for Viciious build
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Clone and build Viciious emulator
+      run: |
+        git clone --depth 1 https://github.com/luxocrates/viciious.git /tmp/viciious
+        cd /tmp/viciious
+        cp $GITHUB_WORKSPACE/src/emulator/webpack.config.js .
+        npm install
+        npm install html-inline-script-webpack-plugin html-inline-css-webpack-plugin --save-dev
+        npm run build-web-prod
+        ls -lh dist/web-prod/
+
+    - name: Inject auto-load script into emulator
+      run: |
+        mkdir -p build/web
+        python3 src/python/inject_autoload.py /tmp/viciious/dist/web-prod/viciious.html build/web/index.html spellcheck.d64
+
+    - name: Copy D64 to web directory
+      run: |
+        cp build/artifacts/spellcheck.d64 build/web/
+        ls -lh build/web/
+
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
@@ -63,8 +88,18 @@ jobs:
           build/artifacts/spellcheck.prg
           build/artifacts/spellcheck.d64
           build/generated/bloom.dat
+          build/web/index.html
+          build/web/spellcheck.d64
         retention-days: 90
     
+    - name: Deploy to GitHub Pages
+      if: github.ref == 'refs/heads/main'
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./build/web
+        cname: false
+
     - name: Create release on tag
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1

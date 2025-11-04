@@ -204,7 +204,13 @@ def create_disk_image(prg_path, bloom_path, output_d64):
 def main():
     # Change to project directory for relative paths
     script_dir = Path(__file__).parent
-    project_dir = script_dir if script_dir.name != 'tools' else script_dir.parent
+    # Handle being in src/python/ subdirectory
+    if script_dir.name == 'python':
+        project_dir = script_dir.parent.parent
+    elif script_dir.name == 'tools':
+        project_dir = script_dir.parent
+    else:
+        project_dir = script_dir
     os.chdir(project_dir)
     
     # Download word list if needed
