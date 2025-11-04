@@ -100,6 +100,44 @@ const hash_func_t hash_functions[NUM_HASH_FUNCTIONS] = {
  * Disk I/O functions
  */
 
+/* Read and check DOS error from command channel 15 */
+uint8_t check_dos_error(char *err_msg, uint8_t err_msg_size) {
+    uint8_t err_num = 0;
+    uint8_t err_idx = 0;
+    uint8_t c;
+
+    if (cbm_k_chkin(15)) {
+        if (err_msg) strcpy(err_msg, "can't read cmd channel");
+        return 255;
+    }
+
+    /* Read error number (2 digits) */
+    c = cbm_k_basin();
+    if (c >= '0' && c <= '9') err_num = (c - '0') * 10;
+    c = cbm_k_basin();
+    if (c >= '0' && c <= '9') err_num += (c - '0');
+
+    /* Read rest of message until CR if buffer provided */
+    if (err_msg && err_msg_size > 0) {
+        cbm_k_basin();  /* skip comma */
+        while (err_idx < err_msg_size - 1) {
+            c = cbm_k_basin();
+            if (c == '\r' || cbm_k_readst()) break;
+            err_msg[err_idx++] = c;
+        }
+        err_msg[err_idx] = '\0';
+    } else {
+        /* Skip rest of message */
+        while (!cbm_k_readst()) {
+            c = cbm_k_basin();
+            if (c == '\r') break;
+        }
+    }
+
+    cbm_k_clrch();
+    return err_num;
+}
+
 bool open_bloom_file(void) {
     cbm_k_close(bloom_lfn);
 
@@ -173,6 +211,19 @@ bool seek_to_record(uint16_t record_num) {
 
     /* Clear channel after sending command */
     cbm_k_clrch();
+
+    /* Check for DOS errors */
+    char err_msg[40];
+    uint8_t err_num = check_dos_error(err_msg, sizeof(err_msg));
+
+    if (err_num != 0 && err_num != 50) {
+        printf("dos error %u: %s\n", err_num, err_msg);
+        return false;
+    }
+
+    if (err_num == 50) {
+        printf("(new record) ");
+    }
 
     current_record = record_num;
     return true;
