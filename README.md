@@ -1,3 +1,6 @@
+
+<img width="960" height="680" alt="bloomer-1" src="https://github.com/user-attachments/assets/368c143c-2ba1-4c42-ab53-07a1b7ec8650" />
+
 # C64 Bloom Filter Spell Checker
 
 A spell checker for the Commodore 64 using Bloom filters to check words against the SCOWL (Spell Checker Oriented Word Lists) dictionary from aspell.net.
