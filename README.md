@@ -4,11 +4,14 @@ A spell checker for the Commodore 64 using Bloom filters to check words against 
 
 ## Features
 
-- 178,691 word official Scrabble tournament dictionary (TWL06)
-- ~3.18% false positive rate
+- Knows all words in the 178,691 word official Scrabble tournament dictionary (TWL06)
+- ~3.18% false positive rate on random entries
+- 0.00% false negative rate
 - Fits on a single 1541 floppy disk
 - On-demand disk sector loading (no need to load entire filter into RAM)
 - 5 hash functions for optimal distribution
+- Mad geek sniping skills
+
 
 ## Download
 
@@ -117,7 +120,7 @@ c64-spellcheck/
 
 ## License
 
-Public domain / MIT - use as you wish.
+Public domain / MIT - use as you wish, but don't claim you wrote it.
 
 ## References
 
