@@ -28,8 +28,9 @@ class CHeaderGenerator:
               "https://www.github.com/johnwbyrd/bloomer\\n\\n" \\
               "Dictionary: {word_count} words\\n" \\
               "Source: {dict_desc}\\n\\n" \\
-              "Correct words always pass, and misspelled words\\n" \\
-              "pass only {fp_rate:06.2f}%% of the time.\\n" \\
+              "Correct words always pass, and\\n" \\
+              "misspelled words pass only {fp_rate:06.2f}%%\\n" \\
+              "of the time.\\n" \\
               "Let's check spelling!\\n\\n"
 
 #endif /* BLOOM_CONFIG_H */

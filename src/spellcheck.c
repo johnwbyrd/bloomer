@@ -35,11 +35,11 @@
 /* PETSCII color control codes */
 #define PETSCII_COLOR_GOOD 0x1E      /* Green text for correct words */
 #define PETSCII_COLOR_BAD 0x1C       /* Red text for misspelled words */
-#define PETSCII_COLOR_DEFAULT 0x9A   /* Light blue (C64 default) */
+#define PETSCII_COLOR_DEFAULT 0x9B   /* C64 default */
 
 /* PETSCII symbols */
-#define PETSCII_CIRCLE 0x51   /* Circle symbol for OK */
-#define PETSCII_X 0x58        /* X symbol for NOT FOUND */
+#define PETSCII_CIRCLE 0x57   /* Circle symbol for OK */
+#define PETSCII_X 0x56        /* X symbol for NOT FOUND */
 
 /* UI constants */
 #define PROMPT_LENGTH 18   /* Length of "word (or 'quit'): " */
@@ -472,6 +472,7 @@ int main(void) {
   uint8_t spaces_needed;
   uint8_t i;
 
+  printf("%c", PETSCII_COLOR_DEFAULT);
   printf(DICT_INFO);
 
   /* Open bloom filter file */
