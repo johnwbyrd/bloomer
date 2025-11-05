@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-Build Bloom filter from TWL06 word list and create C64 disk image.
+Build Bloom filter from SCOWL word list and create C64 disk image.
 """
 import os
 import sys
 import struct
 import subprocess
 from pathlib import Path
+from urllib.parse import urlencode
 
 try:
     import requests
@@ -21,8 +22,18 @@ except ImportError:
     sys.exit(1)
 
 
-# Configuration
-WORD_LIST_URL = "https://norvig.com/ngrams/TWL06.txt"
+# SCOWL Configuration - customizable parameters
+# See: http://wordlist.aspell.net/scowl-readme/ for parameter documentation
+SCOWL_CONFIG = {
+    'max_size': 60,          # Size: 10, 20, 35 (small), 40, 50 (medium), 55, 60 (default), 70 (large), 80 (huge), 95 (insane)
+    'spelling': ['US'],      # List: US, GBs (British -ise), GBz (British -ize), CA (Canadian), AU (Australian)
+    'max_variant': 0,        # Variants: 0 (none), 1 (common), 2 (acceptable), 3 (seldom-used)
+    'diacritic': 'strip',    # Diacritics: strip, keep, both
+    'special': ['hacker', 'roman-numerals'],  # Special lists: hacker, roman-numerals
+    'encoding': 'utf-8',     # Encoding: utf-8, iso-8859-1
+    'format': 'inline',      # Format: inline, tar.gz, zip
+}
+
 BLOOM_SIZE_BYTES = 160256  # 626 blocks * 256 bytes
 BLOOM_SIZE_BITS = BLOOM_SIZE_BYTES * 8  # 1,282,048 bits
 NUM_HASH_FUNCTIONS = 5
@@ -33,19 +44,62 @@ CACHE_DIR = BUILD_DIR / 'cache'
 GENERATED_DIR = BUILD_DIR / 'generated'
 ARTIFACTS_DIR = BUILD_DIR / 'artifacts'
 
-WORD_LIST_CACHE = CACHE_DIR / 'TWL06.txt'
+WORD_LIST_CACHE = CACHE_DIR / 'scowl_wordlist.txt'
+
+
+def build_scowl_url(config):
+    """Build SCOWL download URL from configuration parameters."""
+    params = []
+
+    # Add max_size
+    params.append(('max_size', config['max_size']))
+
+    # Add spelling(s) - can be multiple
+    for spell in config['spelling']:
+        params.append(('spelling', spell))
+
+    # Add max_variant
+    params.append(('max_variant', config['max_variant']))
+
+    # Add diacritic handling
+    params.append(('diacritic', config['diacritic']))
+
+    # Add special lists - can be multiple
+    for special in config['special']:
+        params.append(('special', special))
+
+    # Add download type
+    params.append(('download', 'wordlist'))
+
+    # Add encoding
+    params.append(('encoding', config['encoding']))
+
+    # Add format
+    params.append(('format', config['format']))
+
+    # Build URL with parameters
+    base_url = "http://app.aspell.net/create"
+    query_string = '&'.join([f"{k}={v}" for k, v in params])
+
+    return f"{base_url}?{query_string}"
 
 
 def download_word_list():
-    """Download word list if not cached."""
+    """Download SCOWL word list if not cached."""
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
     if WORD_LIST_CACHE.exists():
         print(f"Using cached word list: {WORD_LIST_CACHE}")
         return
 
-    print(f"Downloading word list from {WORD_LIST_URL}...")
-    response = requests.get(WORD_LIST_URL)
+    url = build_scowl_url(SCOWL_CONFIG)
+    print(f"Downloading SCOWL word list...")
+    print(f"  Size: {SCOWL_CONFIG['max_size']}, Spelling: {', '.join(SCOWL_CONFIG['spelling'])}")
+    print(f"  Variants: {SCOWL_CONFIG['max_variant']}, Diacritics: {SCOWL_CONFIG['diacritic']}")
+    print(f"  Special: {', '.join(SCOWL_CONFIG['special'])}")
+    print(f"URL: {url}")
+
+    response = requests.get(url)
     response.raise_for_status()
 
     with open(WORD_LIST_CACHE, 'wb') as f:
@@ -54,9 +108,25 @@ def download_word_list():
 
 
 def load_words():
-    """Load words from the word list file."""
+    """Load words from the SCOWL word list file, skipping header."""
     with open(WORD_LIST_CACHE, 'r', encoding='utf-8') as f:
-        words = [line.strip().upper() for line in f if line.strip()]
+        lines = f.readlines()
+
+    # Find the separator line "---"
+    separator_index = -1
+    for i, line in enumerate(lines):
+        if line.strip() == '---':
+            separator_index = i
+            break
+
+    if separator_index == -1:
+        print("Warning: No separator '---' found, processing entire file")
+        words = [line.strip().upper() for line in lines if line.strip()]
+    else:
+        print(f"Found separator at line {separator_index + 1}, skipping header")
+        # Words start after the separator
+        words = [line.strip().upper() for line in lines[separator_index + 1:] if line.strip()]
+
     print(f"Loaded {len(words)} words from word list")
     return words
 
@@ -234,6 +304,11 @@ def main():
     # Generate C header with configuration
     header_path = GENERATED_DIR / 'bloom_config.h'
     header_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Build dictionary info string
+    spelling_str = ', '.join(SCOWL_CONFIG['spelling'])
+    dict_desc = f"scowl size {SCOWL_CONFIG['max_size']} ({spelling_str})"
+
     with open(header_path, 'w') as f:
         f.write(f"""/* Auto-generated Bloom filter configuration */
 #ifndef BLOOM_CONFIG_H
@@ -243,7 +318,7 @@ def main():
 #define BLOOM_SIZE_BITS {BLOOM_SIZE_BITS}UL
 #define NUM_HASH_FUNCTIONS {NUM_HASH_FUNCTIONS}
 #define NUM_RECORDS {BLOOM_SIZE_BYTES // 254}
-#define DICT_INFO "dictionary: {word_count} words from the\\nofficial scrabble tournament dictionary\\ncorrect words always pass.\\nmisspelled words pass only {false_positive_rate:.2f}%%\\nof the time. let's check spelling!\\n\\n"
+#define DICT_INFO "dictionary: {word_count} words\\nfrom {dict_desc}\\ncorrect words always pass.\\nmisspelled words pass only {false_positive_rate:.2f}%%\\nof the time. let's check spelling!\\n\\n"
 
 #endif /* BLOOM_CONFIG_H */
 """)
