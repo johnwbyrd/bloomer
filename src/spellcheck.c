@@ -32,6 +32,15 @@
 #define CBM_STATUS_EOF 0x40 /* End of file status bit */
 #define BITS_PER_BYTE 8
 
+/* PETSCII colors */
+#define COLOR_GREEN 0x1E   /* Green text */
+#define COLOR_RED 0x1C     /* Red text */
+#define COLOR_CYAN 0x9F    /* Cyan text (C64 default) */
+
+/* UI constants */
+#define PROMPT_LENGTH 18   /* Length of "word (or 'quit'): " */
+#define CHECKING_LENGTH 8  /* Length of "Checking" */
+
 /* PETSCII character ranges */
 #define PETSCII_LOWERCASE_START 0xC1
 #define PETSCII_LOWERCASE_END 0xDA
@@ -65,6 +74,9 @@ static int16_t current_record = -1;
 
 /* Debug mode flag */
 static bool debug_mode = false;
+
+/* Progress indicator counter */
+static uint8_t period_count = 0;
 
 /* ========================================================================== */
 /* HASH FUNCTIONS                                                            */
@@ -309,6 +321,7 @@ static bool bloom_read_bit(uint32_t bit_pos) {
 
     if (!debug_mode) {
       printf("."); /* Progress indicator */
+      period_count++;
     }
 
     /* Read entire record into buffer */
@@ -354,6 +367,9 @@ static bool check_word(const char *word) {
   uint32_t bit_positions[NUM_HASH_FUNCTIONS];
   uint32_t temp;
 
+  /* Reset period counter */
+  period_count = 0;
+
   if (!debug_mode) {
     printf("Checking");
   }
@@ -378,16 +394,10 @@ static bool check_word(const char *word) {
   /* Check bits in sorted order (left-to-right on disk) */
   for (i = 0; i < NUM_HASH_FUNCTIONS; i++) {
     if (!bloom_read_bit(bit_positions[i])) {
-      if (!debug_mode) {
-        printf("\n");
-      }
       return false; /* Definitely not in dictionary */
     }
   }
 
-  if (!debug_mode) {
-    printf("\n");
-  }
   return true; /* Probably in dictionary */
 }
 
@@ -454,7 +464,10 @@ void trim(char *str) {
 
 int main(void) {
   char word[MAX_WORD_LEN];
-  
+  bool result;
+  uint8_t spaces_needed;
+  uint8_t i;
+
   printf(DICT_INFO);
 
   /* Open bloom filter file */
@@ -483,10 +496,21 @@ int main(void) {
       break;
     }
 
-    if (check_word(word)) {
-      printf("  OK\n");
+    result = check_word(word);
+
+    /* Calculate alignment: prompt length - "Checking" length - periods printed */
+    spaces_needed = PROMPT_LENGTH - CHECKING_LENGTH - period_count;
+
+    /* Print spaces to align under user's word */
+    for (i = 0; i < spaces_needed; i++) {
+      printf(" ");
+    }
+
+    /* Print colored result */
+    if (result) {
+      printf("%c* %cOK\n", COLOR_GREEN, COLOR_CYAN);
     } else {
-      printf("  NOT FOUND\n");
+      printf("%c* %cNOT FOUND\n", COLOR_RED, COLOR_CYAN);
     }
   }
 
