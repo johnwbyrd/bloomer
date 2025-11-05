@@ -42,32 +42,31 @@ jobs:
 
     - name: Build C64 program and disk image
       run: |
+        set -e  # Exit on any error
         mkdir build
         cd build
         cmake ..
         make
         cd ..
+
+        # Validate build artifacts
+        echo "Validating build artifacts..."
+        if [ ! -f "build/artifacts/spellcheck.prg" ]; then
+          echo "ERROR: spellcheck.prg not found!"
+          exit 1
+        fi
+        if [ ! -f "build/artifacts/spellcheck.d64" ]; then
+          echo "ERROR: spellcheck.d64 not found!"
+          exit 1
+        fi
+        if [ ! -f "build/generated/bloom.dat" ]; then
+          echo "ERROR: bloom.dat not found!"
+          exit 1
+        fi
+
+        echo "Build artifacts validated successfully:"
         ls -lh build/artifacts/
-
-    - name: Set up Node.js for Viciious build
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-
-    - name: Clone and build Viciious emulator
-      run: |
-        git clone --depth 1 https://github.com/luxocrates/viciious.git /tmp/viciious
-        cd /tmp/viciious
-        cp $GITHUB_WORKSPACE/src/emulator/webpack.config.js .
-        npm install
-        npm install html-inline-script-webpack-plugin html-inline-css-webpack-plugin --save-dev
-        npm run build-web-prod
-
-    - name: Prepare web deployment
-      run: |
-        mkdir -p build/web
-        python3 src/python/inject_autoload.py /tmp/viciious/dist/web-prod/viciious.html build/web/index.html spellcheck.d64
-        cp build/artifacts/spellcheck.d64 build/web/
+        ls -lh build/generated/bloom.dat
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
@@ -77,8 +76,6 @@ jobs:
           build/artifacts/spellcheck.prg
           build/artifacts/spellcheck.d64
           build/generated/bloom.dat
-          build/web/index.html
-          build/web/spellcheck.d64
         retention-days: 90
 
     - name: Deploy to GitHub Pages
@@ -86,7 +83,7 @@ jobs:
       uses: peaceiris/actions-gh-pages@v3
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: ./build/web
+        publish_dir: ./build/artifacts
         cname: false
 
     - name: Create release on tag
