@@ -35,7 +35,7 @@
 /* PETSCII color control codes */
 #define PETSCII_COLOR_GOOD 0x1E      /* Green text for correct words */
 #define PETSCII_COLOR_BAD 0x1C       /* Red text for misspelled words */
-#define PETSCII_COLOR_DEFAULT 0x9B   /* C64 default */
+#define PETSCII_COLOR_DEFAULT 0xDA   /* C64 default */
 
 /* PETSCII symbols */
 #define PETSCII_CIRCLE 0xCF   /* O symbol for OK */
