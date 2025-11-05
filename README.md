@@ -1,5 +1,4 @@
-
-<img width="480" height="340" alt="bloomer-2" src="https://github.com/user-attachments/assets/48133d05-89c0-40b8-8a4b-0462e6710458" />
+<img width="960" height="680" alt="bloomer-3" src="https://github.com/user-attachments/assets/9856369e-c189-406d-93b0-da75396e7720" />
 
 # C64 Bloom Filter Spell Checker
 
