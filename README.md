@@ -5,17 +5,17 @@
 
 ## This Is Impossible, So Don't Even Try It
 
-We fit a complete professional-grade dictionary—**123,676 words**—onto a Commodore 64.
+We fit a complete, modern, professional-grade, industry-standard English dictionary -- **123,676 words** -- onto a Commodore 64.
 
-A computer from 1982 with **64KB of RAM** and a **1MHz processor** can now check your spelling against *the exact same English dictionary* embedded in modern web browsers and most Linux distributions.
+A computer from 1982 with **64KB of RAM** can now check your spelling against *the exact same English dictionary* embedded in all modern web browsers and most Linux distributions.
 
-The SCOWL 60 wordlist alone is 1.19MB. But the Commodore 1541 can access only 170KB of memory on a single disk. And the poor Commodore 64 has only 64KB of RAM. **Do the math.**
+That English dictionary is the [SCOWL 60 word list](http://wordlist.aspell.net/scowl-readme/).  That word list is 1.19MB *by itself*, before any code that operates on it.  Unfortunately, the Commodore 1541 can fit only 170KB of data on a single disk.  And the poor Commodore 64 has only 64KB of RAM.  **Do the math.**
 
 ## How?
 
 **Bloom filters + 1541 disk drive as external memory.**
 
-Think of it as a probabilistic hash table that lives on your floppy disk. Five different hash functions compute bit positions in real-time on that 1MHz 6510 processor, and the program reads only the exact disk sectors it needs -- typically 2-3 sectors per word lookup. This gives you spell checking with a **0.81% false positive rate** and **zero false negatives**.
+Think of it as a probabilistic hash table that lives on your floppy disk. Five different hash functions compute bit positions in real-time on that 1MHz 6510 processor, and the program reads only the exact disk sectors it needs -- between one and five sectors per word lookup. This gives you spell checking with a **0.81% false positive rate** and **zero false negatives**.
 
 ## The Absurdity of It All
 
@@ -78,7 +78,7 @@ cmake .. && make
 ```
 
 The build process:
-1. Downloads the SCOWL 60 word list (123,676 words)
+1. Downloads the SCOWL 60 word list
 2. Generates a 1.28-million-bit Bloom filter
 3. Optimizes it for 1541 disk geometry
 4. Compiles C64-native code with LLVM-MOS
