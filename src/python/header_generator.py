@@ -24,7 +24,7 @@ class CHeaderGenerator:
 #define BLOOM_SIZE_BITS {config.size_bits}UL
 #define NUM_HASH_FUNCTIONS {config.num_hash_functions}
 #define NUM_RECORDS {config.num_records}
-#define DICT_INFO "Dictionary: {word_count} words\\nfrom {dict_desc}.\\nCorrect words always pass.\\nMisspelled words pass only {fp_rate:.2f}%%\\nof the time. Let's check spelling!\\n\\n"
+#define DICT_INFO "Dictionary: {word_count} words\\nfrom {dict_desc}.\\nCorrect words always pass.\\nMisspelled words pass only {fp_rate:06.2f}%%\\nof the time. Let's check spelling!\\n\\n"
 
 #endif /* BLOOM_CONFIG_H */
 """
