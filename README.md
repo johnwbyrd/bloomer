@@ -3,21 +3,19 @@
 
 # Bloomer: A 123,676-Word Spell Checker for the Commodore 64
 
-## This Shouldn't Be Possible
+## This Is Impossible, So Don't Even Try It
 
 We fit a complete professional-grade dictionary—**123,676 words**—onto a Commodore 64.
 
 A computer from 1982 with **64KB of RAM** and a **1MHz processor** is now checking your spelling against the same SCOWL dictionary used by modern Linux spell checkers.
 
-The dictionary data alone is 160KB. The C64 has 64KB of RAM. **Do the math.**
+The SCOWL wordlist alone is 1.19MB. But the Commodore 1541 holds only 170KB of memory.160KB. And the poor Commodore 64 has only 64KB of RAM. **Do the math.**
 
 ## How?
 
 **Bloom filters + 1541 disk drive as external memory.**
 
-Think of it as a probabilistic hash table that lives on your floppy disk. Five different hash functions compute bit positions in real-time on that 1MHz 6510 processor, and the program reads only the exact disk sectors it needs—typically 2-3 sectors per word lookup. No loading bars. No "please wait." Just instant spell checking with a **0.81% false positive rate** and **zero false negatives**.
-
-For comparison: Google's spell checker has a ~3% false positive rate. We're beating modern systems on 1982 hardware.
+Think of it as a probabilistic hash table that lives on your floppy disk. Five different hash functions compute bit positions in real-time on that 1MHz 6510 processor, and the program reads only the exact disk sectors it needs—typically 2-3 sectors per word lookup. No loading bars. No "please wait." Just spell checking with a **0.81% false positive rate** and **zero false negatives**.
 
 ## The Absurdity of It All
 
@@ -38,22 +36,11 @@ When you type a word, the C64:
 
 All while displaying progress dots and color-coded results in glorious PETSCII.
 
-## Mad Geek Sniping Skills
-
-This is what happens when you combine:
-- Burton Howard Bloom's 1970 space-efficient set membership algorithm
-- The Commodore 1541's REL file random access capabilities
-- Modern LLVM-MOS compiler technology
-- The complete SCOWL word list (Spell Checker Oriented Word Lists)
-- A complete disregard for the concept of "impossible"
-
-The result? A spell checker that would have been considered black magic in 1982, running on actual 1982 hardware.
-
 ## Download
 
 **[Download spellcheck.d64](https://johnwbyrd.github.io/bloomer/spellcheck.d64)** - Latest build from main branch
 
-Load it in VICE, or if you're truly hardcore, write it to a real 1541 disk and run it on actual Commodore 64 hardware. We won't judge.
+Load it in VICE, or if you're truly l33t, write it to a real 1541 disk and run it on actual Commodore 64 hardware. We won't judge.
 
 ## Quick Start
 
@@ -69,7 +56,6 @@ Type a word. Get a color-coded answer. Question your assumptions about what "vin
 ### Runtime
 - Commodore 64 (or VICE emulator)
 - 1541 disk drive (or emulation thereof)
-- A sense of wonder about what's possible with limited resources
 
 ### Building From Source
 - CMake 3.18+
@@ -193,8 +179,6 @@ RUN
 Type any word:
 - Green circle + "OK" → Spelled correctly
 - Red X + "NOT FOUND" → Not in dictionary
-
-Watch the progress dots as it reads disk sectors. Marvel at the fact that this is happening on genuine 6502 code, on hardware from before the IBM PC existed, checking against a dictionary larger than most vintage word processors could dream of.
 
 ## License
 
