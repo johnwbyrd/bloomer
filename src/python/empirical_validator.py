@@ -1,4 +1,11 @@
-"""Empirical validation of Bloom filter false positive rate."""
+"""
+Empirical validation of Bloom filter false positive rate.
+
+Copyright (c) 2025 John Byrd
+https://github.com/johnwbyrd/bloomer
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
 import random
 import string
 from typing import List

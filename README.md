@@ -182,7 +182,9 @@ Type any word:
 
 ## License
 
-Public domain / MIT. Use it, learn from it, improve it. Just don't claim you wrote it first.
+Three-clause BSD.  Do pretty much what you want with it, just don't claim that you wrote it.
+
+SPDX-License-Identifier: BSD-3-Clause
 
 ## References & Acknowledgments
 

@@ -1,4 +1,11 @@
-"""C1541 disk geometry calculations for Bloom filter sizing."""
+"""
+C1541 disk geometry calculations for Bloom filter sizing.
+
+Copyright (c) 2025 John Byrd
+https://github.com/johnwbyrd/bloomer
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
 from dataclasses import dataclass
 
 

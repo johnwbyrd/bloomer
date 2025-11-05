@@ -1,4 +1,11 @@
-"""Bloom filter configuration."""
+"""
+Bloom filter configuration.
+
+Copyright (c) 2025 John Byrd
+https://github.com/johnwbyrd/bloomer
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
 import math
 from dataclasses import dataclass
 from disk_geometry import DiskGeometry

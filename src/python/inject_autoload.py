@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
 Inject auto-load script into Viciious HTML to automatically load and run a D64 disk image.
+
+Copyright (c) 2025 John Byrd
+https://github.com/johnwbyrd/bloomer
+
+SPDX-License-Identifier: BSD-3-Clause
 """
 
 import sys

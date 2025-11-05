@@ -1,4 +1,11 @@
-"""Hash function implementations for Bloom filter."""
+"""
+Hash function implementations for Bloom filter.
+
+Copyright (c) 2025 John Byrd
+https://github.com/johnwbyrd/bloomer
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
 
 
 def hash_fnv1a(word: str, seed: int = 0) -> int:

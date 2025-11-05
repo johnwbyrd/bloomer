@@ -1,4 +1,11 @@
-"""C header file generator for Bloom filter configuration."""
+"""
+C header file generator for Bloom filter configuration.
+
+Copyright (c) 2025 John Byrd
+https://github.com/johnwbyrd/bloomer
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
 from pathlib import Path
 from typing import Dict
 from bloom_config import BloomConfig

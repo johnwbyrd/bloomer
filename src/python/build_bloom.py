@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Build Bloom filter from SCOWL word list and create C64 disk image."""
+"""
+Build Bloom filter from SCOWL word list and create C64 disk image.
+
+Copyright (c) 2025 John Byrd
+https://github.com/johnwbyrd/bloomer
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
 import os
 import sys
 from pathlib import Path

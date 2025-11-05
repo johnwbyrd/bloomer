@@ -1,4 +1,11 @@
-"""Bloom filter implementation."""
+"""
+Bloom filter implementation.
+
+Copyright (c) 2025 John Byrd
+https://github.com/johnwbyrd/bloomer
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
 from typing import List
 from bloom_config import BloomConfig
 from hash_functions import ALL_HASH_FUNCTIONS

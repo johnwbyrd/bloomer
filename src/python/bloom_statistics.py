@@ -1,4 +1,11 @@
-"""Bloom filter statistics calculation and display."""
+"""
+Bloom filter statistics calculation and display.
+
+Copyright (c) 2025 John Byrd
+https://github.com/johnwbyrd/bloomer
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
 import math
 from bloom_filter import BloomFilter
 

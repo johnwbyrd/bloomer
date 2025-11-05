@@ -1,4 +1,11 @@
-"""D64 disk image creator."""
+"""
+D64 disk image creator.
+
+Copyright (c) 2025 John Byrd
+https://github.com/johnwbyrd/bloomer
+
+SPDX-License-Identifier: BSD-3-Clause
+"""
 from pathlib import Path
 import d64
 

@@ -1,6 +1,11 @@
 /*
  * C64 Bloom Filter Spell Checker
  *
+ * Copyright (c) 2025 John Byrd
+ * https://github.com/johnwbyrd/bloomer
+ *
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
  * A spell checker for the Commodore 64 that uses a Bloom filter stored in a
  * REL file on disk. Words are hashed with 5 different hash functions and
  * checked against a bit array to determine if they exist in the dictionary.
