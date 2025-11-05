@@ -1,474 +1,93 @@
 #!/usr/bin/env python3
-"""
-Build Bloom filter from SCOWL word list and create C64 disk image.
-"""
+"""Build Bloom filter from SCOWL word list and create C64 disk image."""
 import os
 import sys
-import math
 from pathlib import Path
 
-try:
-    import requests
-except ImportError:
-    print("Error: requests module required. Install with: pip install requests")
-    sys.exit(1)
+# Import our modules
+from disk_geometry import DiskGeometry
+from bloom_config import BloomConfig
+from bloom_filter import BloomFilter
+from bloom_statistics import BloomStatistics
+from empirical_validator import EmpiricalValidator
+from scowl_downloader import SCOWLDownloader
+from scowl_parser import SCOWLParser
+from header_generator import CHeaderGenerator
+from disk_creator import DiskImageCreator
 
-try:
-    import d64
-except ImportError:
-    print("Error: d64 module required. Install with: pip install d64")
-    sys.exit(1)
 
-
-# SCOWL Configuration - customizable parameters
-# See: http://wordlist.aspell.net/scowl-readme/ for parameter documentation
+# SCOWL Configuration
 SCOWL_CONFIG = {
-    'max_size': 60,          # Size: 10, 20, 35 (small), 40, 50 (medium), 55, 60 (default), 70 (large), 80 (huge), 95 (insane)
-    'spelling': ['US'],      # List: US, GBs (British -ise), GBz (British -ize), CA (Canadian), AU (Australian)
-    'max_variant': 0,        # Variants: 0 (none), 1 (common), 2 (acceptable), 3 (seldom-used)
-    'diacritic': 'strip',    # Diacritics: strip, keep, both
-    'special': ['hacker', 'roman-numerals'],  # Special lists: hacker, roman-numerals
-    'encoding': 'utf-8',     # Encoding: utf-8, iso-8859-1
-    'format': 'inline',      # Format: inline, tar.gz, zip
+    'max_size': 60,
+    'spelling': ['US'],
+    'max_variant': 0,
+    'diacritic': 'strip',
+    'special': ['hacker', 'roman-numerals'],
+    'encoding': 'utf-8',
+    'format': 'inline',
 }
-
-# C1541 Disk geometry and constraints
-TOTAL_DISK_SECTORS = 683
-DIRECTORY_SECTORS = 19
-PROGRAM_SECTORS = 20
-REL_SIDE_SECTOR_OVERHEAD = 15
-BYTES_PER_SECTOR = 256
-REL_RECORD_SIZE = 254
-NUM_HASH_FUNCTIONS = 5
-
-# Calculate bloom filter size
-AVAILABLE_SECTORS = TOTAL_DISK_SECTORS - DIRECTORY_SECTORS - PROGRAM_SECTORS - REL_SIDE_SECTOR_OVERHEAD
-BLOOM_RECORDS = AVAILABLE_SECTORS * BYTES_PER_SECTOR // REL_RECORD_SIZE
-BLOOM_SIZE_BYTES = BLOOM_RECORDS * REL_RECORD_SIZE
-BLOOM_SIZE_BITS = BLOOM_SIZE_BYTES * 8
-
-print("=" * 80)
-print("C1541 DISK GEOMETRY")
-print("=" * 80)
-print(f"Total disk sectors: {TOTAL_DISK_SECTORS}")
-print(f"  - Directory/BAM: {DIRECTORY_SECTORS} sectors")
-print(f"  - Program file: {PROGRAM_SECTORS} sectors")
-print(f"  - REL side sectors: {REL_SIDE_SECTOR_OVERHEAD} sectors")
-print(f"  = Available: {AVAILABLE_SECTORS} sectors")
-print()
-print(f"REL record size: {REL_RECORD_SIZE} bytes (CBM DOS max)")
-print(f"Records: {AVAILABLE_SECTORS} × {BYTES_PER_SECTOR} ÷ {REL_RECORD_SIZE} = {BLOOM_RECORDS}")
-print()
-print("BLOOM FILTER SIZE")
-print(f"  Bytes: {BLOOM_RECORDS} × {REL_RECORD_SIZE} = {BLOOM_SIZE_BYTES:,} ({BLOOM_SIZE_BYTES / 1024:.2f} KB)")
-print(f"  Bits: {BLOOM_SIZE_BYTES} × 8 = {BLOOM_SIZE_BITS:,}")
-print(f"  Hash functions: {NUM_HASH_FUNCTIONS}")
-print()
-
-# Calculate optimal k
-EXPECTED_WORDS = 124000
-optimal_k = (BLOOM_SIZE_BITS / EXPECTED_WORDS) * math.log(2)
-print(f"Optimal k for ~{EXPECTED_WORDS:,} words: (m/n) × ln(2) = {optimal_k:.2f}")
-print(f"Using k={NUM_HASH_FUNCTIONS} (fewer disk reads per lookup)")
-print("=" * 80)
-print()
 
 # Directory structure
 BUILD_DIR = Path('build')
 CACHE_DIR = BUILD_DIR / 'cache'
 GENERATED_DIR = BUILD_DIR / 'generated'
 ARTIFACTS_DIR = BUILD_DIR / 'artifacts'
-
 WORD_LIST_CACHE = CACHE_DIR / 'scowl_wordlist.txt'
 
 
-def build_scowl_url(config):
-    """Build SCOWL download URL from configuration parameters."""
-    params = []
-
-    # Add max_size
-    params.append(('max_size', config['max_size']))
-
-    # Add spelling(s) - can be multiple
-    for spell in config['spelling']:
-        params.append(('spelling', spell))
-
-    # Add max_variant
-    params.append(('max_variant', config['max_variant']))
-
-    # Add diacritic handling
-    params.append(('diacritic', config['diacritic']))
-
-    # Add special lists - can be multiple
-    for special in config['special']:
-        params.append(('special', special))
-
-    # Add download type
-    params.append(('download', 'wordlist'))
-
-    # Add encoding
-    params.append(('encoding', config['encoding']))
-
-    # Add format
-    params.append(('format', config['format']))
-
-    # Build URL with parameters
-    base_url = "http://app.aspell.net/create"
-    query_string = '&'.join([f"{k}={v}" for k, v in params])
-
-    return f"{base_url}?{query_string}"
-
-
-def download_word_list():
-    """Download SCOWL word list if not cached."""
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-
-    if WORD_LIST_CACHE.exists():
-        print(f"Using cached word list: {WORD_LIST_CACHE}")
-        return
-
-    url = build_scowl_url(SCOWL_CONFIG)
-    print(f"Downloading SCOWL word list...")
-    print(f"  Size: {SCOWL_CONFIG['max_size']}, Spelling: {', '.join(SCOWL_CONFIG['spelling'])}")
-    print(f"  Variants: {SCOWL_CONFIG['max_variant']}, Diacritics: {SCOWL_CONFIG['diacritic']}")
-    print(f"  Special: {', '.join(SCOWL_CONFIG['special'])}")
-    print(f"URL: {url}")
-
-    response = requests.get(url)
-    response.raise_for_status()
-
-    with open(WORD_LIST_CACHE, 'wb') as f:
-        f.write(response.content)
-    print(f"Word list downloaded and cached to {WORD_LIST_CACHE}")
-
-
-def load_words():
-    """Load words from the SCOWL word list file, skipping header."""
-    with open(WORD_LIST_CACHE, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
-
-    # Find the separator line "---"
-    separator_index = -1
-    for i, line in enumerate(lines):
-        if line.strip() == '---':
-            separator_index = i
-            break
-
-    if separator_index == -1:
-        print("Warning: No separator '---' found, processing entire file")
-        words = [line.strip().upper() for line in lines if line.strip()]
-    else:
-        print(f"Found separator at line {separator_index + 1}, skipping header")
-        # Words start after the separator
-        words = [line.strip().upper() for line in lines[separator_index + 1:] if line.strip()]
-
-    print(f"Loaded {len(words)} words from word list")
-    return words
-
-
-def hash_fnv1a(word, seed=0):
-    """FNV-1a hash function."""
-    hash_val = 2166136261 + seed
-    for char in word:
-        hash_val ^= ord(char)
-        hash_val = (hash_val * 16777619) & 0xFFFFFFFF
-    return hash_val
-
-
-def hash_djb2(word, seed=0):
-    """DJB2 hash function."""
-    hash_val = 5381 + seed
-    for char in word:
-        hash_val = ((hash_val << 5) + hash_val + ord(char)) & 0xFFFFFFFF
-    return hash_val
-
-
-def hash_sdbm(word, seed=0):
-    """SDBM hash function."""
-    hash_val = seed
-    for char in word:
-        hash_val = (ord(char) + (hash_val << 6) + (hash_val << 16) - hash_val) & 0xFFFFFFFF
-    return hash_val
-
-
-def hash_jenkins(word, seed=0):
-    """Jenkins one-at-a-time hash."""
-    hash_val = seed
-    for char in word:
-        hash_val += ord(char)
-        hash_val = (hash_val + (hash_val << 10)) & 0xFFFFFFFF
-        hash_val ^= (hash_val >> 6)
-    hash_val = (hash_val + (hash_val << 3)) & 0xFFFFFFFF
-    hash_val ^= (hash_val >> 11)
-    hash_val = (hash_val + (hash_val << 15)) & 0xFFFFFFFF
-    return hash_val
-
-
-def hash_murmur(word, seed=0):
-    """Simplified Murmur-inspired hash."""
-    hash_val = seed + 0x9747b28c
-    for char in word:
-        hash_val ^= ord(char)
-        hash_val = (hash_val * 0x5bd1e995) & 0xFFFFFFFF
-        hash_val ^= (hash_val >> 15)
-    return hash_val
-
-
-HASH_FUNCTIONS = [
-    hash_fnv1a,
-    hash_djb2,
-    hash_sdbm,
-    hash_jenkins,
-    hash_murmur
-]
-
-
-def get_bit_positions(word):
-    """Calculate bit positions for a word using all hash functions."""
-    positions = []
-    for i, hash_func in enumerate(HASH_FUNCTIONS):
-        hash_val = hash_func(word, seed=i)
-        bit_pos = hash_val % BLOOM_SIZE_BITS
-        positions.append(bit_pos)
-    return positions
-
-
-def check_word_in_filter(word, bloom):
-    """Check if a word appears to be in the Bloom filter."""
-    positions = get_bit_positions(word)
-    for bit_pos in positions:
-        byte_idx = bit_pos // 8
-        bit_idx = bit_pos % 8
-        if (bloom[byte_idx] & (1 << bit_idx)) == 0:
-            return False
-    return True
-
-
-def build_bloom_filter(words):
-    """Build Bloom filter bit array from word list."""
-    # Initialize bit array
-    bloom = bytearray(BLOOM_SIZE_BYTES)
-
-    print(f"Building Bloom filter ({BLOOM_SIZE_BYTES:,} bytes, {NUM_HASH_FUNCTIONS} hash functions)...")
-
-    for idx, word in enumerate(words):
-        if idx % 10000 == 0:
-            print(f"  Processing word {idx}/{len(words)}...")
-
-        positions = get_bit_positions(word)
-        for bit_pos in positions:
-            byte_idx = bit_pos // 8
-            bit_idx = bit_pos % 8
-            bloom[byte_idx] |= (1 << bit_idx)
-
-    print("Bloom filter built successfully")
-
-    # Calculate actual bits set for statistics
-    bits_set = sum(bin(byte).count('1') for byte in bloom)
-    actual_fill_rate = bits_set / BLOOM_SIZE_BITS
-
-    # =============================================================================
-    # FALSE POSITIVE RATE CALCULATION
-    # =============================================================================
-    #
-    # The correct formula for Bloom filter false positive probability is:
-    #
-    #   P_fp = (1 - e^(-kn/m))^k
-    #
-    # where:
-    #   k = number of hash functions
-    #   n = number of items inserted (words in dictionary)
-    #   m = number of bits in the filter
-    #   e = Euler's number (2.71828...)
-    #
-    # Derivation:
-    #   1. Probability a specific bit is NOT set by one hash: (1 - 1/m)
-    #   2. After k hashes for one word: (1 - 1/m)^k
-    #   3. After n words with k hashes each: (1 - 1/m)^(kn)
-    #   4. As m is large: (1 - 1/m)^(kn) ≈ e^(-kn/m)
-    #   5. Probability a bit IS set: 1 - e^(-kn/m)
-    #   6. False positive when all k bits happen to be set: (1 - e^(-kn/m))^k
-    #
-    n = len(words)
-    k = NUM_HASH_FUNCTIONS
-    m = BLOOM_SIZE_BITS
-
-    # Calculate theoretical fill rate
-    exponent = -k * n / m
-    prob_bit_zero = math.exp(exponent)  # e^(-kn/m)
-    theoretical_fill_rate = 1 - prob_bit_zero
-
-    # Calculate false positive rate
-    false_positive_rate = theoretical_fill_rate ** k
-
-    print(f"\n=== BLOOM FILTER STATISTICS ===")
-    print(f"Words inserted (n): {n:,}")
-    print(f"Bits in filter (m): {m:,}")
-    print(f"Hash functions (k): {k}")
-    print(f"Bits per word (m/n): {m/n:.2f}")
-    print(f"\nActual bits set: {bits_set:,} / {m:,} ({actual_fill_rate * 100:.2f}%)")
-    print(f"Theoretical fill rate: {theoretical_fill_rate * 100:.2f}%")
-    print(f"Difference: {abs(actual_fill_rate - theoretical_fill_rate) * 100:.2f}%")
-    print(f"\nFalse positive rate: {false_positive_rate * 100:.4f}% (1 in {1/false_positive_rate:.0f})")
-    print(f"Formula: (1 - e^(-{k}×{n}/{m}))^{k} = {false_positive_rate:.6f}")
-
-    # Calculate what optimal k would be
-    optimal_k = (m / n) * math.log(2)
-    print(f"\nOptimal k for minimum FP rate: {optimal_k:.2f}")
-    if abs(optimal_k - k) > 1:
-        optimal_k_int = round(optimal_k)
-        optimal_fp = (1 - math.exp(-optimal_k_int * n / m)) ** optimal_k_int
-        print(f"With k={optimal_k_int}: FP rate would be {optimal_fp * 100:.4f}%")
-        print(f"Trade-off: Using k={k} reduces disk I/O (fewer sector reads per word)")
-
-    # Empirical validation with random garbage
-    print("\n" + "=" * 80)
-    print("EMPIRICAL VALIDATION")
-    print("=" * 80)
-    print("Testing false positive rate with random non-words...")
-
-    import random
-    import string
-
-    # Convert dictionary to set for quick lookup
-    word_set = set(words)
-
-    test_samples = 100000
-    false_positives = 0
-
-    for i in range(test_samples):
-        # Generate random garbage string (3-15 chars)
-        length = random.randint(3, 15)
-        random_str = ''.join(random.choices(string.ascii_uppercase, k=length))
-
-        # Skip if it happens to be a real word
-        if random_str in word_set:
-            continue
-
-        # Check if Bloom filter accepts it (false positive)
-        if check_word_in_filter(random_str, bloom):
-            false_positives += 1
-
-    empirical_fp_rate = false_positives / test_samples
-
-    print(f"Random samples tested: {test_samples:,}")
-    print(f"False positives: {false_positives:,}")
-    print(f"Empirical FP rate: {empirical_fp_rate * 100:.4f}%")
-    print(f"Theoretical FP rate: {false_positive_rate * 100:.4f}%")
-    print(f"Difference: {abs(empirical_fp_rate - false_positive_rate) * 100:.4f}%")
-
-    if abs(empirical_fp_rate - false_positive_rate) < 0.002:
-        print("✓ Empirical rate matches theory!")
-    else:
-        print("⚠ Empirical rate differs from theory (expected due to random sampling)")
-
-    print("=" * 80)
-
-    return bloom, len(words), false_positive_rate * 100
-
-
-def write_bloom_file(bloom, output_path):
-    """Write Bloom filter to binary file."""
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, 'wb') as f:
-        f.write(bloom)
-    print(f"Bloom filter written to {output_path}")
-
-
-def create_disk_image(prg_path, bloom_path, output_d64):
-    """Create .d64 disk image with program and Bloom filter using d64 library."""
-    print(f"Creating disk image: {output_d64}")
-
-    output_d64.parent.mkdir(parents=True, exist_ok=True)
-
-    # Create a new D64 disk image
-    d64.DiskImage.create('d64', output_d64, b'SPELLCHECK', b'SK')
-
-    # Add files to the disk
-    with d64.DiskImage(output_d64, mode='w') as img:
-        # Add program file if it exists
-        if prg_path.exists():
-            print(f"Adding program: {prg_path} ({prg_path.stat().st_size} bytes)")
-            p = img.path(b'SPELLCHECK')
-            with p.open('w', ftype='prg') as f:
-                with open(prg_path, 'rb') as src:
-                    f.write(src.read())
-        else:
-            print(f"Warning: Program file {prg_path} not found")
-
-        # Add Bloom filter data file as REL file with 254-byte records
-        # Note: CBM DOS REL files support record lengths 1-254 only
-        print(f"Adding Bloom filter: {bloom_path} ({bloom_path.stat().st_size} bytes)")
-        p = img.path(b'BLOOM.DAT')
-        with p.open('w', ftype='rel', record_len=254) as f:
-            with open(bloom_path, 'rb') as src:
-                f.write(src.read())
-
-    # Display directory listing
-    print(f"\nDisk image created: {output_d64}")
-    with d64.DiskImage(output_d64) as img:
-        for line in img.directory():
-            print(line)
-
-    return True
-
-
 def main():
-    # Change to project directory for relative paths
+    # Change to project directory
     script_dir = Path(__file__).parent
-    # Handle being in src/python/ subdirectory
     if script_dir.name == 'python':
-        project_dir = script_dir.parent.parent
-    elif script_dir.name == 'tools':
-        project_dir = script_dir.parent
-    else:
-        project_dir = script_dir
-    os.chdir(project_dir)
-    
-    # Download word list if needed
-    download_word_list()
-    
-    # Load words
-    words = load_words()
+        os.chdir(script_dir.parent.parent)
+
+    # Setup configuration
+    geometry = DiskGeometry()
+    config = BloomConfig(geometry=geometry, num_hash_functions=5)
+    config.print_summary()
+
+    # Download word list
+    downloader = SCOWLDownloader(CACHE_DIR)
+    word_file = downloader.download(SCOWL_CONFIG, WORD_LIST_CACHE)
+
+    # Parse words
+    parser = SCOWLParser()
+    words = parser.parse(word_file)
 
     # Build Bloom filter
-    bloom, word_count, false_positive_rate = build_bloom_filter(words)
+    bloom = BloomFilter(config)
+    bloom.build_from_words(words)
 
-    # Write Bloom filter to generated directory
+    # Calculate and display statistics
+    stats = BloomStatistics(bloom, len(words))
+    stats.print_statistics()
+
+    # Run empirical validation
+    validator = EmpiricalValidator(bloom, words)
+    validator.print_validation(stats.false_positive_rate())
+
+    # Write Bloom filter data
     bloom_path = GENERATED_DIR / 'bloom.dat'
-    write_bloom_file(bloom, bloom_path)
+    bloom_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(bloom_path, 'wb') as f:
+        f.write(bloom.data)
+    print(f"Bloom filter written to {bloom_path}")
 
-    # Generate C header with configuration
+    # Generate C header
+    header_gen = CHeaderGenerator()
     header_path = GENERATED_DIR / 'bloom_config.h'
-    header_path.parent.mkdir(parents=True, exist_ok=True)
+    header_gen.generate(config, len(words), stats.false_positive_rate() * 100,
+                       SCOWL_CONFIG, header_path)
 
-    # Build dictionary info string
-    spelling_str = ', '.join(SCOWL_CONFIG['spelling'])
-    dict_desc = f"scowl size {SCOWL_CONFIG['max_size']} ({spelling_str})"
-
-    with open(header_path, 'w') as f:
-        f.write(f"""/* Auto-generated Bloom filter configuration */
-#ifndef BLOOM_CONFIG_H
-#define BLOOM_CONFIG_H
-
-#define BLOOM_SIZE_BYTES {BLOOM_SIZE_BYTES}UL
-#define BLOOM_SIZE_BITS {BLOOM_SIZE_BITS}UL
-#define NUM_HASH_FUNCTIONS {NUM_HASH_FUNCTIONS}
-#define NUM_RECORDS {BLOOM_SIZE_BYTES // 254}
-#define DICT_INFO "Dictionary: {word_count} words\\nfrom {dict_desc}.\\nCorrect words always pass.\\nMisspelled words pass only {false_positive_rate:2.2f}%%\\nof the time. Let's check spelling!\\n\\n"
-
-#endif /* BLOOM_CONFIG_H */
-""")
-    print(f"Generated configuration header: {header_path}")
-
-    # Create disk image if program exists
+    # Create disk image
+    disk_creator = DiskImageCreator()
     prg_path = ARTIFACTS_DIR / 'spellcheck.prg'
     d64_path = ARTIFACTS_DIR / 'spellcheck.d64'
-    create_disk_image(prg_path, bloom_path, d64_path)
+    disk_creator.create(prg_path, bloom_path, d64_path)
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("BUILD COMPLETE!")
-    print("="*60)
+    print("=" * 60)
 
 
 if __name__ == '__main__':
