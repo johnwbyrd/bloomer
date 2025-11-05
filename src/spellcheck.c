@@ -27,6 +27,9 @@ static uint8_t record_buffer[RECORD_SIZE];
 /* Current loaded record number (-1 = none) */
 static int16_t current_record = -1;
 
+/* Debug mode flag */
+static bool debug_mode = false;
+
 
 /*
  * Hash functions - must match Python implementation exactly
@@ -151,7 +154,9 @@ static bool check_dos_status(uint8_t device, const char *operation, const uint8_
 
     err = read_dos_status(device, msg, sizeof(msg));
 
-    printf("%s: DOS %02u,%s\n", operation, err, msg);
+    if (debug_mode) {
+        printf("%s: DOS %02u,%s\n", operation, err, msg);
+    }
 
     /* Check if error code is 0 or in the OK list */
     is_ok = (err == 0);
@@ -243,6 +248,10 @@ static bool bloom_read_bit(uint32_t bit_pos) {
         cbm_k_clrch();
         check_dos_status(bloom_device, "position", NULL, 0);
 
+        if (!debug_mode) {
+            printf(".");
+        }
+
         /* Read record */
         st = cbm_k_chkin(bloom_lfn);
         if (st) {
@@ -272,15 +281,25 @@ static bool check_word(const char *word) {
     uint32_t hash;
     uint32_t bit_pos;
 
+    if (!debug_mode) {
+        printf("Checking");
+    }
+
     for (i = 0; i < NUM_HASH_FUNCTIONS; i++) {
         hash = hash_functions[i](word, i);
         bit_pos = hash % BLOOM_SIZE_BITS;
 
         if (!bloom_read_bit(bit_pos)) {
+            if (!debug_mode) {
+                printf("\n");
+            }
             return false;  /* Definitely not in dictionary */
         }
     }
 
+    if (!debug_mode) {
+        printf("\n");
+    }
     return true;  /* Probably in dictionary */
 }
 
