@@ -277,19 +277,35 @@ static bool bloom_read_bit(uint32_t bit_pos) {
  */
 
 static bool check_word(const char *word) {
-    uint8_t i;
+    uint8_t i, j;
     uint32_t hash;
-    uint32_t bit_pos;
+    uint32_t bit_positions[NUM_HASH_FUNCTIONS];
+    uint32_t temp;
 
     if (!debug_mode) {
         printf("Checking");
     }
 
+    /* Compute all bit positions */
     for (i = 0; i < NUM_HASH_FUNCTIONS; i++) {
         hash = hash_functions[i](word, i);
-        bit_pos = hash % BLOOM_SIZE_BITS;
+        bit_positions[i] = hash % BLOOM_SIZE_BITS;
+    }
 
-        if (!bloom_read_bit(bit_pos)) {
+    /* Sort bit positions (bubble sort - simple for small N) */
+    for (i = 0; i < NUM_HASH_FUNCTIONS - 1; i++) {
+        for (j = 0; j < NUM_HASH_FUNCTIONS - 1 - i; j++) {
+            if (bit_positions[j] > bit_positions[j + 1]) {
+                temp = bit_positions[j];
+                bit_positions[j] = bit_positions[j + 1];
+                bit_positions[j + 1] = temp;
+            }
+        }
+    }
+
+    /* Check bits in sorted order (left-to-right on disk) */
+    for (i = 0; i < NUM_HASH_FUNCTIONS; i++) {
+        if (!bloom_read_bit(bit_positions[i])) {
             if (!debug_mode) {
                 printf("\n");
             }
