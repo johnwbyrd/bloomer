@@ -9,7 +9,7 @@ We fit a complete professional-grade dictionary—**123,676 words**—onto a Com
 
 A computer from 1982 with **64KB of RAM** and a **1MHz processor** is now checking your spelling against the same SCOWL dictionary used by modern Linux spell checkers.
 
-The SCOWL wordlist alone is 1.19MB. But the Commodore 1541 holds only 170KB of memory.160KB. And the poor Commodore 64 has only 64KB of RAM. **Do the math.**
+The SCOWL wordlist alone is 1.19MB. But the Commodore 1541 holds only 170KB of memory. And the poor Commodore 64 has only 64KB of RAM. **Do the math.**
 
 ## How?
 
@@ -32,7 +32,7 @@ When you type a word, the C64:
 1. Computes 5 hash values (FNV-1a, DJB2, SDBM, Jenkins, Murmur)
 2. Sorts the bit positions for optimal disk access
 3. Reads 2-3 disk sectors on average
-4. Returns your answer in under a second
+4. Returns your answer in a few seconds
 
 All while displaying progress dots and color-coded results in glorious PETSCII.
 
@@ -40,7 +40,7 @@ All while displaying progress dots and color-coded results in glorious PETSCII.
 
 **[Download spellcheck.d64](https://johnwbyrd.github.io/bloomer/spellcheck.d64)** - Latest build from main branch
 
-Load it in VICE, or if you're truly l33t, write it to a real 1541 disk and run it on actual Commodore 64 hardware. We won't judge.
+Load it in VICE, or if you're truly l33t, write it to a real 1541 disk and run it on actual Commodore 64 hardware.
 
 ## Quick Start
 
