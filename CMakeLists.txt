@@ -1,20 +1,22 @@
 cmake_minimum_required(VERSION 3.18)
 
-# Set the target platform for LLVM-MOS
-set(CMAKE_SYSTEM_NAME Generic)
-set(CMAKE_SYSTEM_PROCESSOR mos)
+# Find mos-c64-clang compiler directly (matches GitHub workflow)
+find_program(MOS_C64_CLANG mos-c64-clang
+    HINTS /opt/llvm-mos/bin
+    REQUIRED
+)
 
-# Project definition
+# Set as C compiler before project()
+set(CMAKE_C_COMPILER ${MOS_C64_CLANG})
+set(CMAKE_C_COMPILER_WORKS 1)  # Skip compiler test for cross-compilation
+
 project(c64_spellcheck C)
-
-# Find LLVM-MOS SDK
-find_package(llvm-mos-sdk REQUIRED)
 
 # Set C standard
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# Generate Bloom filter and config header first
+# Step 1: Generate Bloom filter and config header (mirrors GitHub workflow)
 add_custom_command(
     OUTPUT ${CMAKE_SOURCE_DIR}/build/generated/bloom_config.h
            ${CMAKE_SOURCE_DIR}/build/generated/bloom.dat
@@ -24,7 +26,7 @@ add_custom_command(
     COMMENT "Building Bloom filter data"
 )
 
-# Add executable
+# Step 2: Compile C64 program (mirrors: mos-c64-clang -Os -Ibuild/generated ...)
 add_executable(spellcheck
     src/spellcheck.c
     ${CMAKE_SOURCE_DIR}/build/generated/bloom_config.h
@@ -35,9 +37,10 @@ target_include_directories(spellcheck PRIVATE
     ${CMAKE_SOURCE_DIR}/build/generated
 )
 
-# Target C64
+# Compiler flags matching GitHub workflow
 target_compile_options(spellcheck PRIVATE
-    -Os  # Optimize for size
+    -Os      # Optimize for size
+    -flto    # Enable link-time optimization
 )
 
 # Set output to artifacts directory
@@ -47,7 +50,7 @@ set_target_properties(spellcheck PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build/artifacts"
 )
 
-# Custom target to create disk image after build
+# Step 3: Create disk image after build (mirrors second build_bloom.py call)
 add_custom_command(TARGET spellcheck POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E echo "Creating disk image..."
     COMMAND python3 ${CMAKE_SOURCE_DIR}/src/python/build_bloom.py

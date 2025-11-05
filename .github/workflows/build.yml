@@ -13,21 +13,21 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-    
+
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-    
+
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -e .
-    
+
     - name: Download and install LLVM-MOS SDK
       run: |
         cd /tmp
@@ -35,28 +35,18 @@ jobs:
         tar xf llvm-mos-linux.tar.xz
         sudo mv llvm-mos /opt/
         echo "/opt/llvm-mos/bin" >> $GITHUB_PATH
-    
+
     - name: Verify LLVM-MOS installation
       run: |
         mos-c64-clang --version
-    
-    - name: Build Bloom filter and generate config
-      run: |
-        python3 src/python/build_bloom.py
 
-    - name: Compile C64 program
+    - name: Build C64 program and disk image
       run: |
-        mos-c64-clang -Os -Ibuild/generated -o build/artifacts/spellcheck.prg src/spellcheck.c
-        ls -lh build/artifacts/spellcheck.prg
-
-    - name: Create final disk image
-      run: |
-        python3 src/python/build_bloom.py
-
-    - name: Verify disk image
-      run: |
-        ls -lh build/artifacts/spellcheck.d64
-        echo "Disk image size: $(stat -c%s build/artifacts/spellcheck.d64) bytes"
+        mkdir build
+        cd build
+        cmake ..
+        make
+        ls -lh ../artifacts/
 
     - name: Set up Node.js for Viciious build
       uses: actions/setup-node@v4
@@ -71,30 +61,25 @@ jobs:
         npm install
         npm install html-inline-script-webpack-plugin html-inline-css-webpack-plugin --save-dev
         npm run build-web-prod
-        ls -lh dist/web-prod/
 
-    - name: Inject auto-load script into emulator
+    - name: Prepare web deployment
       run: |
         mkdir -p build/web
         python3 src/python/inject_autoload.py /tmp/viciious/dist/web-prod/viciious.html build/web/index.html spellcheck.d64
-
-    - name: Copy D64 to web directory
-      run: |
-        cp build/artifacts/spellcheck.d64 build/web/
-        ls -lh build/web/
+        cp artifacts/spellcheck.d64 build/web/
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: c64-spellcheck
         path: |
-          build/artifacts/spellcheck.prg
-          build/artifacts/spellcheck.d64
+          artifacts/spellcheck.prg
+          artifacts/spellcheck.d64
           build/generated/bloom.dat
           build/web/index.html
           build/web/spellcheck.d64
         retention-days: 90
-    
+
     - name: Deploy to GitHub Pages
       if: github.ref == 'refs/heads/main'
       uses: peaceiris/actions-gh-pages@v3
@@ -108,7 +93,7 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          build/artifacts/spellcheck.d64
-          build/artifacts/spellcheck.prg
+          artifacts/spellcheck.d64
+          artifacts/spellcheck.prg
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
