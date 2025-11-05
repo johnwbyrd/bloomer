@@ -85,6 +85,7 @@ jobs:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: ./build/artifacts
         cname: false
+        exclude_assets: '.*'
 
     - name: Create release on tag
       if: startsWith(github.ref, 'refs/tags/')
