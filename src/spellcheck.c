@@ -32,10 +32,14 @@
 #define CBM_STATUS_EOF 0x40 /* End of file status bit */
 #define BITS_PER_BYTE 8
 
-/* PETSCII colors */
-#define COLOR_GREEN 0x1E   /* Green text */
-#define COLOR_RED 0x1C     /* Red text */
-#define COLOR_CYAN 0x9F    /* Cyan text (C64 default) */
+/* PETSCII color control codes */
+#define PETSCII_COLOR_GOOD 0x1E      /* Green text for correct words */
+#define PETSCII_COLOR_BAD 0x1C       /* Red text for misspelled words */
+#define PETSCII_COLOR_DEFAULT 0x9F   /* Light blue (C64 default) */
+
+/* PETSCII symbols */
+#define PETSCII_CIRCLE 0x51   /* Circle symbol for OK */
+#define PETSCII_X 0x58        /* X symbol for NOT FOUND */
 
 /* UI constants */
 #define PROMPT_LENGTH 18   /* Length of "word (or 'quit'): " */
@@ -508,9 +512,9 @@ int main(void) {
 
     /* Print colored result */
     if (result) {
-      printf("%c* %cOK\n", COLOR_GREEN, COLOR_CYAN);
+      printf("%c%c %cOK\n", PETSCII_COLOR_GOOD, PETSCII_CIRCLE, PETSCII_COLOR_DEFAULT);
     } else {
-      printf("%c* %cNOT FOUND\n", COLOR_RED, COLOR_CYAN);
+      printf("%c%c %cNOT FOUND\n", PETSCII_COLOR_BAD, PETSCII_X, PETSCII_COLOR_DEFAULT);
     }
   }
 
