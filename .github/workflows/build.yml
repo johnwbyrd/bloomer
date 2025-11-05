@@ -47,7 +47,7 @@ jobs:
         cmake ..
         make
         cd ..
-        ls -lh artifacts/
+        ls -lh build/artifacts/
 
     - name: Set up Node.js for Viciious build
       uses: actions/setup-node@v4
@@ -67,15 +67,15 @@ jobs:
       run: |
         mkdir -p build/web
         python3 src/python/inject_autoload.py /tmp/viciious/dist/web-prod/viciious.html build/web/index.html spellcheck.d64
-        cp artifacts/spellcheck.d64 build/web/
+        cp build/artifacts/spellcheck.d64 build/web/
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: c64-spellcheck
         path: |
-          artifacts/spellcheck.prg
-          artifacts/spellcheck.d64
+          build/artifacts/spellcheck.prg
+          build/artifacts/spellcheck.d64
           build/generated/bloom.dat
           build/web/index.html
           build/web/spellcheck.d64
@@ -94,7 +94,7 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          artifacts/spellcheck.d64
-          artifacts/spellcheck.prg
+          build/artifacts/spellcheck.d64
+          build/artifacts/spellcheck.prg
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
