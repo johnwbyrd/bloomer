@@ -4,11 +4,15 @@ A spell checker for the Commodore 64 using Bloom filters to check words against 
 
 ## Features
 
-- 178,691 word dictionary (TWL06)
-- ~1.1% false positive rate
+- 178,691 word official Scrabble tournament dictionary (TWL06)
+- ~3.18% false positive rate
 - Fits on a single 1541 floppy disk
 - On-demand disk sector loading (no need to load entire filter into RAM)
 - 5 hash functions for optimal distribution
+
+## Download
+
+[Download spellcheck.d64](https://johnwbyrd.github.io/bloomer/spellcheck.d64) - Latest build of d64 Commodore 1541 disk image from main branch.  Run this with your Commodore 64 emulator!
 
 ## Requirements
 
@@ -80,7 +84,7 @@ RUN
 - Size: 160,256 bytes (626 disk blocks)
 - Bits: 1,282,048
 - Hash functions: 5 (FNV-1a, DJB2, SDBM, Jenkins, Murmur-inspired)
-- False positive rate: ~1.1%
+- False positive rate: ~3.18%
 
 ### Disk Layout
 - Program: ~5KB

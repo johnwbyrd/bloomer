@@ -243,7 +243,7 @@ def main():
 #define BLOOM_SIZE_BITS {BLOOM_SIZE_BITS}UL
 #define NUM_HASH_FUNCTIONS {NUM_HASH_FUNCTIONS}
 #define NUM_RECORDS {BLOOM_SIZE_BYTES // 254}
-#define DICT_INFO "dictionary: {word_count} words\\ncorrect words always pass.\\nmisspelled words pass only {false_positive_rate:.2f}%\\nof the time. let's check spelling!\\n\\n"
+#define DICT_INFO "dictionary: {word_count} words\\nfrom the official scrabble tournament dictionary.\\ncorrect words always pass.\\nmisspelled words pass only {false_positive_rate:.2f}%\\nof the time. let's check spelling!\\n\\n"
 
 #endif /* BLOOM_CONFIG_H */
 """)
