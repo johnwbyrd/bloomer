@@ -9,24 +9,21 @@ We fit a complete professional-grade dictionary—**123,676 words**—onto a Com
 
 A computer from 1982 with **64KB of RAM** and a **1MHz processor** is now checking your spelling against the same SCOWL dictionary used by modern Linux spell checkers.
 
-The SCOWL wordlist alone is 1.19MB. But the Commodore 1541 holds only 170KB of memory. And the poor Commodore 64 has only 64KB of RAM. **Do the math.**
+The SCOWL wordlist alone is 1.19MB. But the Commodore 1541 can access only 170KB of memory on a single disk. And the poor Commodore 64 has only 64KB of RAM. **Do the math.**
 
 ## How?
 
 **Bloom filters + 1541 disk drive as external memory.**
 
-Think of it as a probabilistic hash table that lives on your floppy disk. Five different hash functions compute bit positions in real-time on that 1MHz 6510 processor, and the program reads only the exact disk sectors it needs—typically 2-3 sectors per word lookup. No loading bars. No "please wait." Just spell checking with a **0.81% false positive rate** and **zero false negatives**.
+Think of it as a probabilistic hash table that lives on your floppy disk. Five different hash functions compute bit positions in real-time on that 1MHz 6510 processor, and the program reads only the exact disk sectors it needs -- typically 2-3 sectors per word lookup. This gives you spell checking with a **0.81% false positive rate** and **zero false negatives**.
 
 ## The Absurdity of It All
 
 - **123,676 words** - More than most people's active vocabulary
 - **0.81% false positive rate** - 99.19% of misspellings get caught
-- **0% false negative rate** - Correct words ALWAYS pass
+- **0% false negative rate** - Words in this dictionary ALWAYS pass
 - **Fits on one floppy disk** - 160KB Bloom filter + 8KB program
-- **Real-time on 1MHz** - 5 hash functions computed instantly
-- **Zero RAM footprint** - Entire dictionary stays on disk
 - **Sorted disk access** - Minimizes 1541 head movement
-- **REL file caching** - Smart sector buffering
 
 When you type a word, the C64:
 1. Computes 5 hash values (FNV-1a, DJB2, SDBM, Jenkins, Murmur)
