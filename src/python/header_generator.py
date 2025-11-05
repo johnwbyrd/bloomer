@@ -30,7 +30,7 @@ class CHeaderGenerator:
               "Source: {dict_desc}\\n\\n" \\
               "Correct words always pass, and\\n" \\
               "misspelled words pass only {fp_rate:06.2f}%%\\n" \\
-              "of the time.\\n" \\
+              "of the time.\\n\\n" \\
               "Let's check spelling!\\n\\n"
 
 #endif /* BLOOM_CONFIG_H */
