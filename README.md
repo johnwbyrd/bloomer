@@ -22,9 +22,9 @@ A spell checker for the Commodore 64 using Bloom filters to check words against 
 
 ### Build Environment
 - CMake 3.18 or later
-- LLVM-MOS SDK (https://github.com/llvm-mos/llvm-mos-sdk)
-- Python 3.6+ with `requests` module
-- VICE emulator suite (for `c1541` disk image tool)
+- LLVM-MOS toolchain with `mos-c64-clang` (https://github.com/llvm-mos/llvm-mos-sdk)
+- Python 3.8+ with dependencies (install via `pip install -e .`)
+- c1541 tool from VICE emulator suite
 
 ### Runtime
 - Commodore 64
@@ -34,12 +34,16 @@ A spell checker for the Commodore 64 using Bloom filters to check words against 
 
 1. Install dependencies:
 ```bash
-# Install Python dependencies
-pip install requests
+# Install Python package in editable mode (installs requests, d64 modules)
+pip install -e .
 
-# Install LLVM-MOS SDK (follow instructions at https://github.com/llvm-mos/llvm-mos-sdk)
+# Install LLVM-MOS (extract to /opt/llvm-mos or update CMakeLists.txt)
+wget https://github.com/llvm-mos/llvm-mos-sdk/releases/latest/download/llvm-mos-linux.tar.xz
+tar xf llvm-mos-linux.tar.xz
+sudo mv llvm-mos /opt/
+export PATH="/opt/llvm-mos/bin:$PATH"
 
-# Install VICE emulator for c1541 tool
+# Install VICE for c1541 tool
 # On Ubuntu/Debian:
 sudo apt-get install vice
 
@@ -51,15 +55,16 @@ brew install vice
 ```bash
 mkdir build
 cd build
-cmake -DCMAKE_PREFIX_PATH=/path/to/llvm-mos-sdk ..
+cmake ..
 make
 ```
 
 The build process will:
-1. Compile the C64 program to `spellcheck.prg`
-2. Download the SCOWL word list from aspell.net (cached locally)
-3. Generate the Bloom filter (`bloom.dat`)
-4. Create a .d64 disk image (`spellcheck.d64`) with both files
+1. Download the SCOWL word list from aspell.net (cached in `build/cache/`)
+2. Generate the Bloom filter data (`build/generated/bloom.dat`)
+3. Generate C header with configuration (`build/generated/bloom_config.h`)
+4. Compile the C64 program to `build/artifacts/spellcheck.prg`
+5. Create a .d64 disk image (`build/artifacts/spellcheck.d64`) with both files
 
 ### Customizing the Word List
 
@@ -80,6 +85,7 @@ SCOWL_CONFIG = {
 After changing the configuration, delete the cached word list and rebuild:
 ```bash
 rm build/cache/scowl_wordlist.txt
+rm build/generated/bloom_config.h build/generated/bloom.dat
 cd build
 make
 ```
@@ -111,35 +117,53 @@ RUN
 - Size: 160,782 bytes (633 REL records × 254 bytes)
 - Bits: 1,286,256
 - Hash functions: 5 (FNV-1a, DJB2, SDBM, Jenkins, Murmur-inspired)
-- False positive rate: 0.81% (formula: (1 - e^(-kn/m))^k)
+- False positive rate: currently ~0.81% (formula: (1 - e^(-kn/m))^k)
 
 ### Disk Layout
 - Program: ~5KB
-- Bloom filter: 160KB
+- Bloom filter: ~160KB
 - Total: ~165KB (fits on 170KB disk)
 
 ### Performance
-- Hash computation: Fast (pure CPU)
-- Disk access: 5 reads worst-case per word (one per hash function)
-- Typical: 2-3 reads if hashes map to same/nearby sectors
+- Hash computation: Fast (pure CPU, 5 hash functions)
+- Disk access: Sorted bit positions minimize seeks (left-to-right on disk)
+- 5 REL file reads per word worst-case (one per hash function)
+- Typical: 2-3 reads if multiple hash bits land in the same/nearby records
+- REL record caching reduces redundant disk I/O
 
 ## Project Structure
 ```
-c64-spellcheck/
-├── CMakeLists.txt          # Build configuration
-├── README.md               # This file
+bloomer/
+├── CMakeLists.txt               # Build configuration
+├── pyproject.toml               # Python package metadata
+├── README.md                    # This file
 ├── src/
-│   ├── spellcheck.c        # Main C64 program
-│   ├── python/             # Python build tools
-│   │   ├── build_bloom.py  # Bloom filter builder
-│   │   └── inject_autoload.py # Web emulator auto-load injector
-│   └── emulator/           # Viciious emulator build config
+│   ├── spellcheck.c             # Main C64 program
+│   ├── python/                  # Python build tools
+│   │   ├── build_bloom.py       # Main build orchestrator
+│   │   ├── bloom_config.py      # Bloom filter configuration
+│   │   ├── bloom_filter.py      # Bloom filter implementation
+│   │   ├── bloom_statistics.py  # FP rate calculations
+│   │   ├── disk_geometry.py     # C1541 disk layout calculations
+│   │   ├── disk_creator.py      # D64 disk image creator
+│   │   ├── empirical_validator.py # Random string validation
+│   │   ├── header_generator.py  # C header generator
+│   │   ├── scowl_downloader.py  # SCOWL word list downloader
+│   │   ├── scowl_parser.py      # SCOWL word list parser
+│   │   └── inject_autoload.py   # Web emulator auto-load injector
+│   └── emulator/                # Viciious emulator build config
 │       └── webpack.config.js
-├── bloom_config.h          # Auto-generated configuration
 └── build/
-    ├── spellcheck.prg      # Compiled program
-    ├── bloom.dat           # Bloom filter data
-    └── spellcheck.d64      # Complete disk image
+    ├── cache/                   # Cached SCOWL word lists
+    ├── generated/               # Auto-generated files
+    │   ├── bloom_config.h       # C header with config
+    │   └── bloom.dat            # Bloom filter data
+    ├── artifacts/               # Build outputs
+    │   ├── spellcheck.prg       # Compiled C64 program
+    │   └── spellcheck.d64       # Complete disk image
+    └── web/                     # Web deployment (GitHub Pages)
+        ├── index.html           # Viciious emulator with auto-load
+        └── spellcheck.d64       # Disk image for web
 ```
 
 ## License

@@ -14,7 +14,7 @@ class CHeaderGenerator:
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         spelling_str = ', '.join(scowl_config['spelling'])
-        dict_desc = f"scowl size {scowl_config['max_size']} ({spelling_str})"
+        dict_desc = f"SCOWL size {scowl_config['max_size']} ({spelling_str})"
 
         header_content = f"""/* Auto-generated Bloom filter configuration */
 #ifndef BLOOM_CONFIG_H
@@ -24,7 +24,13 @@ class CHeaderGenerator:
 #define BLOOM_SIZE_BITS {config.size_bits}UL
 #define NUM_HASH_FUNCTIONS {config.num_hash_functions}
 #define NUM_RECORDS {config.num_records}
-#define DICT_INFO "C64 Bloom filter spell checker\\nhttps://github.com/johnwbyrd/bloomer\\nDictionary: {word_count} words\\nfrom {dict_desc}.\\nCorrect words always pass.\\nMisspelled words pass only {fp_rate:06.2f}%%\\nof the time. Let's check spelling!\\n\\n"
+#define DICT_INFO "Commodore 64 Bloom filter spell checker\\n\\n" \\
+              "https://www.github.com/johnwbyrd/bloomer\\n\\n" \\
+              "Dictionary: {word_count} words\\n" \\
+              "Source: {dict_desc}\\n\\n" \\
+              "Correct words always pass, and misspelled words\\n" \\
+              "pass only {fp_rate:06.2f}%% of the time.\\n" \\
+              "Let's check spelling!\\n\\n"
 
 #endif /* BLOOM_CONFIG_H */
 """
