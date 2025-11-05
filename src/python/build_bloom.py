@@ -4,10 +4,8 @@ Build Bloom filter from SCOWL word list and create C64 disk image.
 """
 import os
 import sys
-import struct
-import subprocess
+import math
 from pathlib import Path
-from urllib.parse import urlencode
 
 try:
     import requests
@@ -34,9 +32,46 @@ SCOWL_CONFIG = {
     'format': 'inline',      # Format: inline, tar.gz, zip
 }
 
-BLOOM_SIZE_BYTES = 160256  # 626 blocks * 256 bytes
-BLOOM_SIZE_BITS = BLOOM_SIZE_BYTES * 8  # 1,282,048 bits
+# C1541 Disk geometry and constraints
+TOTAL_DISK_SECTORS = 683
+DIRECTORY_SECTORS = 19
+PROGRAM_SECTORS = 20
+REL_SIDE_SECTOR_OVERHEAD = 15
+BYTES_PER_SECTOR = 256
+REL_RECORD_SIZE = 254
 NUM_HASH_FUNCTIONS = 5
+
+# Calculate bloom filter size
+AVAILABLE_SECTORS = TOTAL_DISK_SECTORS - DIRECTORY_SECTORS - PROGRAM_SECTORS - REL_SIDE_SECTOR_OVERHEAD
+BLOOM_RECORDS = AVAILABLE_SECTORS * BYTES_PER_SECTOR // REL_RECORD_SIZE
+BLOOM_SIZE_BYTES = BLOOM_RECORDS * REL_RECORD_SIZE
+BLOOM_SIZE_BITS = BLOOM_SIZE_BYTES * 8
+
+print("=" * 80)
+print("C1541 DISK GEOMETRY")
+print("=" * 80)
+print(f"Total disk sectors: {TOTAL_DISK_SECTORS}")
+print(f"  - Directory/BAM: {DIRECTORY_SECTORS} sectors")
+print(f"  - Program file: {PROGRAM_SECTORS} sectors")
+print(f"  - REL side sectors: {REL_SIDE_SECTOR_OVERHEAD} sectors")
+print(f"  = Available: {AVAILABLE_SECTORS} sectors")
+print()
+print(f"REL record size: {REL_RECORD_SIZE} bytes (CBM DOS max)")
+print(f"Records: {AVAILABLE_SECTORS} × {BYTES_PER_SECTOR} ÷ {REL_RECORD_SIZE} = {BLOOM_RECORDS}")
+print()
+print("BLOOM FILTER SIZE")
+print(f"  Bytes: {BLOOM_RECORDS} × {REL_RECORD_SIZE} = {BLOOM_SIZE_BYTES:,} ({BLOOM_SIZE_BYTES / 1024:.2f} KB)")
+print(f"  Bits: {BLOOM_SIZE_BYTES} × 8 = {BLOOM_SIZE_BITS:,}")
+print(f"  Hash functions: {NUM_HASH_FUNCTIONS}")
+print()
+
+# Calculate optimal k
+EXPECTED_WORDS = 124000
+optimal_k = (BLOOM_SIZE_BITS / EXPECTED_WORDS) * math.log(2)
+print(f"Optimal k for ~{EXPECTED_WORDS:,} words: (m/n) × ln(2) = {optimal_k:.2f}")
+print(f"Using k={NUM_HASH_FUNCTIONS} (fewer disk reads per lookup)")
+print("=" * 80)
+print()
 
 # Directory structure
 BUILD_DIR = Path('build')
@@ -198,12 +233,23 @@ def get_bit_positions(word):
     return positions
 
 
+def check_word_in_filter(word, bloom):
+    """Check if a word appears to be in the Bloom filter."""
+    positions = get_bit_positions(word)
+    for bit_pos in positions:
+        byte_idx = bit_pos // 8
+        bit_idx = bit_pos % 8
+        if (bloom[byte_idx] & (1 << bit_idx)) == 0:
+            return False
+    return True
+
+
 def build_bloom_filter(words):
     """Build Bloom filter bit array from word list."""
     # Initialize bit array
     bloom = bytearray(BLOOM_SIZE_BYTES)
 
-    print(f"Building Bloom filter ({BLOOM_SIZE_BYTES} bytes, {NUM_HASH_FUNCTIONS} hash functions)...")
+    print(f"Building Bloom filter ({BLOOM_SIZE_BYTES:,} bytes, {NUM_HASH_FUNCTIONS} hash functions)...")
 
     for idx, word in enumerate(words):
         if idx % 10000 == 0:
@@ -219,15 +265,106 @@ def build_bloom_filter(words):
 
     # Calculate actual bits set for statistics
     bits_set = sum(bin(byte).count('1') for byte in bloom)
-    fill_rate = (bits_set / BLOOM_SIZE_BITS) * 100
+    actual_fill_rate = bits_set / BLOOM_SIZE_BITS
 
-    # Calculate false positive probability: (bits_set / total_bits) ^ num_hash_functions
-    false_positive_rate = (bits_set / BLOOM_SIZE_BITS) ** NUM_HASH_FUNCTIONS * 100
+    # =============================================================================
+    # FALSE POSITIVE RATE CALCULATION
+    # =============================================================================
+    #
+    # The correct formula for Bloom filter false positive probability is:
+    #
+    #   P_fp = (1 - e^(-kn/m))^k
+    #
+    # where:
+    #   k = number of hash functions
+    #   n = number of items inserted (words in dictionary)
+    #   m = number of bits in the filter
+    #   e = Euler's number (2.71828...)
+    #
+    # Derivation:
+    #   1. Probability a specific bit is NOT set by one hash: (1 - 1/m)
+    #   2. After k hashes for one word: (1 - 1/m)^k
+    #   3. After n words with k hashes each: (1 - 1/m)^(kn)
+    #   4. As m is large: (1 - 1/m)^(kn) ≈ e^(-kn/m)
+    #   5. Probability a bit IS set: 1 - e^(-kn/m)
+    #   6. False positive when all k bits happen to be set: (1 - e^(-kn/m))^k
+    #
+    n = len(words)
+    k = NUM_HASH_FUNCTIONS
+    m = BLOOM_SIZE_BITS
 
-    print(f"Statistics: {bits_set}/{BLOOM_SIZE_BITS} bits set ({fill_rate:.2f}% full)")
-    print(f"Expected false positive rate: {false_positive_rate:.2f}%")
+    # Calculate theoretical fill rate
+    exponent = -k * n / m
+    prob_bit_zero = math.exp(exponent)  # e^(-kn/m)
+    theoretical_fill_rate = 1 - prob_bit_zero
 
-    return bloom, len(words), false_positive_rate
+    # Calculate false positive rate
+    false_positive_rate = theoretical_fill_rate ** k
+
+    print(f"\n=== BLOOM FILTER STATISTICS ===")
+    print(f"Words inserted (n): {n:,}")
+    print(f"Bits in filter (m): {m:,}")
+    print(f"Hash functions (k): {k}")
+    print(f"Bits per word (m/n): {m/n:.2f}")
+    print(f"\nActual bits set: {bits_set:,} / {m:,} ({actual_fill_rate * 100:.2f}%)")
+    print(f"Theoretical fill rate: {theoretical_fill_rate * 100:.2f}%")
+    print(f"Difference: {abs(actual_fill_rate - theoretical_fill_rate) * 100:.2f}%")
+    print(f"\nFalse positive rate: {false_positive_rate * 100:.4f}% (1 in {1/false_positive_rate:.0f})")
+    print(f"Formula: (1 - e^(-{k}×{n}/{m}))^{k} = {false_positive_rate:.6f}")
+
+    # Calculate what optimal k would be
+    optimal_k = (m / n) * math.log(2)
+    print(f"\nOptimal k for minimum FP rate: {optimal_k:.2f}")
+    if abs(optimal_k - k) > 1:
+        optimal_k_int = round(optimal_k)
+        optimal_fp = (1 - math.exp(-optimal_k_int * n / m)) ** optimal_k_int
+        print(f"With k={optimal_k_int}: FP rate would be {optimal_fp * 100:.4f}%")
+        print(f"Trade-off: Using k={k} reduces disk I/O (fewer sector reads per word)")
+
+    # Empirical validation with random garbage
+    print("\n" + "=" * 80)
+    print("EMPIRICAL VALIDATION")
+    print("=" * 80)
+    print("Testing false positive rate with random non-words...")
+
+    import random
+    import string
+
+    # Convert dictionary to set for quick lookup
+    word_set = set(words)
+
+    test_samples = 100000
+    false_positives = 0
+
+    for i in range(test_samples):
+        # Generate random garbage string (3-15 chars)
+        length = random.randint(3, 15)
+        random_str = ''.join(random.choices(string.ascii_uppercase, k=length))
+
+        # Skip if it happens to be a real word
+        if random_str in word_set:
+            continue
+
+        # Check if Bloom filter accepts it (false positive)
+        if check_word_in_filter(random_str, bloom):
+            false_positives += 1
+
+    empirical_fp_rate = false_positives / test_samples
+
+    print(f"Random samples tested: {test_samples:,}")
+    print(f"False positives: {false_positives:,}")
+    print(f"Empirical FP rate: {empirical_fp_rate * 100:.4f}%")
+    print(f"Theoretical FP rate: {false_positive_rate * 100:.4f}%")
+    print(f"Difference: {abs(empirical_fp_rate - false_positive_rate) * 100:.4f}%")
+
+    if abs(empirical_fp_rate - false_positive_rate) < 0.002:
+        print("✓ Empirical rate matches theory!")
+    else:
+        print("⚠ Empirical rate differs from theory (expected due to random sampling)")
+
+    print("=" * 80)
+
+    return bloom, len(words), false_positive_rate * 100
 
 
 def write_bloom_file(bloom, output_path):
@@ -318,7 +455,7 @@ def main():
 #define BLOOM_SIZE_BITS {BLOOM_SIZE_BITS}UL
 #define NUM_HASH_FUNCTIONS {NUM_HASH_FUNCTIONS}
 #define NUM_RECORDS {BLOOM_SIZE_BYTES // 254}
-#define DICT_INFO "dictionary: {word_count} words\\nfrom {dict_desc}\\ncorrect words always pass.\\nmisspelled words pass only {false_positive_rate:.2f}%%\\nof the time. let's check spelling!\\n\\n"
+#define DICT_INFO "Dictionary: {word_count} words\\nfrom {dict_desc}.\\nCorrect words always pass.\\nMisspelled words pass only {false_positive_rate:2.2f}%%\\nof the time. Let's check spelling!\\n\\n"
 
 #endif /* BLOOM_CONFIG_H */
 """)
@@ -328,9 +465,10 @@ def main():
     prg_path = ARTIFACTS_DIR / 'spellcheck.prg'
     d64_path = ARTIFACTS_DIR / 'spellcheck.d64'
     create_disk_image(prg_path, bloom_path, d64_path)
-    
-    print("\nBuild complete!")
-    print(f"Expected false positive rate: ~1.1%")
+
+    print("\n" + "="*60)
+    print("BUILD COMPLETE!")
+    print("="*60)
 
 
 if __name__ == '__main__':
