@@ -472,7 +472,7 @@ int main(void) {
   uint8_t spaces_needed;
   uint8_t i;
 
-  printf("%c", PETSCII_COLOR_DEFAULT);
+  putchar(PETSCII_COLOR_DEFAULT);
   printf(DICT_INFO);
 
   /* Open bloom filter file */
