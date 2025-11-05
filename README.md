@@ -7,9 +7,9 @@
 
 We fit a complete professional-grade dictionary—**123,676 words**—onto a Commodore 64.
 
-A computer from 1982 with **64KB of RAM** and a **1MHz processor** is now checking your spelling against the same SCOWL dictionary used by modern Linux spell checkers.
+A computer from 1982 with **64KB of RAM** and a **1MHz processor** can now check your spelling against *the exact same English dictionary* embedded in modern web browsers and most Linux distributions.
 
-The SCOWL wordlist alone is 1.19MB. But the Commodore 1541 can access only 170KB of memory on a single disk. And the poor Commodore 64 has only 64KB of RAM. **Do the math.**
+The SCOWL 60 wordlist alone is 1.19MB. But the Commodore 1541 can access only 170KB of memory on a single disk. And the poor Commodore 64 has only 64KB of RAM. **Do the math.**
 
 ## How?
 
@@ -78,7 +78,7 @@ cmake .. && make
 ```
 
 The build process:
-1. Downloads the SCOWL word list (123,676 words)
+1. Downloads the SCOWL 60 word list (123,676 words)
 2. Generates a 1.28-million-bit Bloom filter
 3. Optimizes it for 1541 disk geometry
 4. Compiles C64-native code with LLVM-MOS
@@ -128,7 +128,7 @@ Result: **2-3 disk reads per word** instead of 5. The difference between "fast" 
 | Hash computation | <10ms | 5 functions on 1MHz CPU |
 | Disk sector read | ~200ms | 1541 seek + read |
 | Total per word | ~400-600ms | Cached reads help |
-| User perception | "Instant" | Progress dots + color |
+| User perception | "Soonish" | Progress dots + color |
 
 ### Memory Footprint
 
@@ -179,7 +179,7 @@ Type any word:
 
 ## License
 
-Three-clause BSD.  Do pretty much what you want with it, just don't claim that you wrote it.
+Three-clause BSD.  Do pretty much what you want with it, just don't claim that you wrote it, and don't sue me when it deletes your mom or whatever.
 
 SPDX-License-Identifier: BSD-3-Clause
 

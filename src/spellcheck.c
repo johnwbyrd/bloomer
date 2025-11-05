@@ -392,7 +392,7 @@ static bool check_word(const char *word) {
   /* Sort bit positions to minimize disk seeks (bubble sort) */
   for (i = 0; i < NUM_HASH_FUNCTIONS - 1; i++) {
     for (j = 0; j < NUM_HASH_FUNCTIONS - 1 - i; j++) {
-      if (bit_positions[j] > bit_positions[j + 1]) {
+      if (bit_positions[j] < bit_positions[j + 1]) {
         temp = bit_positions[j];
         bit_positions[j] = bit_positions[j + 1];
         bit_positions[j + 1] = temp;
