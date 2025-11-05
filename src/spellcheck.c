@@ -38,8 +38,8 @@
 #define PETSCII_COLOR_DEFAULT 0x9B   /* C64 default */
 
 /* PETSCII symbols */
-#define PETSCII_CIRCLE 0xD1   /* Circle symbol for OK */
-#define PETSCII_X 0xD6        /* X symbol for NOT FOUND */
+#define PETSCII_CIRCLE 0xCF   /* O symbol for OK */
+#define PETSCII_X 0xD8        /* X symbol for NOT FOUND */
 
 /* UI constants */
 #define PROMPT_LENGTH 18   /* Length of "word (or 'quit'): " */
