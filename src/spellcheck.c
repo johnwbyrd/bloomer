@@ -338,15 +338,14 @@ int main(void) {
     char word[MAX_WORD_LEN];
 
     printf("c64 bloom filter spell checker\n");
-    printf("================================\n\n");
+    printf("================================\n");
+    printf(DICT_INFO);
 
     /* Open bloom filter */
     if (!bloom_open()) {
         printf("failed to open bloom.dat\n");
         return 1;
     }
-
-    printf("ready!\n\n");
 
     /* Main loop */
     while (1) {

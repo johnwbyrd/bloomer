@@ -132,27 +132,32 @@ def build_bloom_filter(words):
     """Build Bloom filter bit array from word list."""
     # Initialize bit array
     bloom = bytearray(BLOOM_SIZE_BYTES)
-    
+
     print(f"Building Bloom filter ({BLOOM_SIZE_BYTES} bytes, {NUM_HASH_FUNCTIONS} hash functions)...")
-    
+
     for idx, word in enumerate(words):
         if idx % 10000 == 0:
             print(f"  Processing word {idx}/{len(words)}...")
-        
+
         positions = get_bit_positions(word)
         for bit_pos in positions:
             byte_idx = bit_pos // 8
             bit_idx = bit_pos % 8
             bloom[byte_idx] |= (1 << bit_idx)
-    
+
     print("Bloom filter built successfully")
-    
+
     # Calculate actual bits set for statistics
     bits_set = sum(bin(byte).count('1') for byte in bloom)
     fill_rate = (bits_set / BLOOM_SIZE_BITS) * 100
+
+    # Calculate false positive probability: (bits_set / total_bits) ^ num_hash_functions
+    false_positive_rate = (bits_set / BLOOM_SIZE_BITS) ** NUM_HASH_FUNCTIONS * 100
+
     print(f"Statistics: {bits_set}/{BLOOM_SIZE_BITS} bits set ({fill_rate:.2f}% full)")
-    
-    return bloom
+    print(f"Expected false positive rate: {false_positive_rate:.2f}%")
+
+    return bloom, len(words), false_positive_rate
 
 
 def write_bloom_file(bloom, output_path):
@@ -218,9 +223,9 @@ def main():
     
     # Load words
     words = load_words()
-    
+
     # Build Bloom filter
-    bloom = build_bloom_filter(words)
+    bloom, word_count, false_positive_rate = build_bloom_filter(words)
 
     # Write Bloom filter to generated directory
     bloom_path = GENERATED_DIR / 'bloom.dat'
@@ -238,6 +243,7 @@ def main():
 #define BLOOM_SIZE_BITS {BLOOM_SIZE_BITS}UL
 #define NUM_HASH_FUNCTIONS {NUM_HASH_FUNCTIONS}
 #define NUM_RECORDS {BLOOM_SIZE_BYTES // 254}
+#define DICT_INFO "dictionary: {word_count} words\\naccuracy: ~{false_positive_rate:.2f}% fpr\\nready to check your spelling!\\n\\n"
 
 #endif /* BLOOM_CONFIG_H */
 """)
