@@ -46,7 +46,8 @@ jobs:
         cd build
         cmake ..
         make
-        ls -lh ../artifacts/
+        cd ..
+        ls -lh artifacts/
 
     - name: Set up Node.js for Viciious build
       uses: actions/setup-node@v4
